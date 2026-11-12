@@ -4,5 +4,20 @@
 ## Category: Quality of Life
 ## Version: @project-version@
 ## SavedVariables: ForeverQoLPanelDB
+## IconTexture: Interface\AddOns\ForeverQoLPanel\media\icon
 
 Core.lua
+Locale.lua
+Debug.lua
+XPBar.lua
+Elements.lua
+Minimap.lua
+ActionBar.lua
+Nameplates.lua
+Gameplay.lua
+Warnings.lua
+Tooltip.lua
+Dock.lua
+UI.lua
+Options.lua
+Wizard.lua
