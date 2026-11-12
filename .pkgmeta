@@ -1,0 +1,17 @@
+# CurseForge packaging: only the addon folder goes into the package.
+package-as: ForeverQoLPanel
+
+move-folders:
+  ForeverQoLPanel/ForeverQoLPanel: ForeverQoLPanel
+
+# Changelog shown on CurseForge: the current release's notes (otherwise the packager lists the git log).
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+ignore:
+  - art
+  - docs
+  - tests
+  - tools
+  - README.md

@@ -4,6 +4,8 @@
 ## Category: Quality of Life
 ## Version: @project-version@
 ## SavedVariables: ForeverQoLPanelDB
+## X-Curse-Project-ID: 1801421
+## X-License: MIT
 ## IconTexture: Interface\AddOns\ForeverQoLPanel\media\icon
 
 Core.lua
