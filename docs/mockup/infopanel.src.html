@@ -1,0 +1,636 @@
+<title>Infopanel mit XP-Leiste</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: a scaled 1280x720 game screen built from WoW: Forever client textures, mock controls below. One dark look on purpose. */
+:root{
+  color-scheme: dark;
+  --page:#13110e; --page-2:#1c1915; --ink:#e9e3d6; --ink-dim:#a39b8b; --line:#302a22;
+  --bronze:#b8925a; --bronze-hi:#e7c88e;
+  --wow-gold:#ffd100; --wow-green:#1eff00; --wow-grey:#9d9d9d;
+  --f-game:"Friz",Georgia,serif;
+  --f-title:"Marcellus",Georgia,serif;
+  --f-page:"Inter",system-ui,sans-serif;
+  --band-h:26px; --bt:11px; --bw:600px;
+}
+body{background:var(--page);color:var(--ink);font-family:var(--f-page)}
+[hidden]{display:none!important}
+.wrap{max-width:1320px;margin:0 auto;padding-block:28px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:22px}
+header h1{font:400 30px/1.15 var(--f-title);margin:0;color:var(--bronze-hi);text-wrap:balance}
+header p{margin:6px 0 0;color:var(--ink-dim);max-width:78ch;line-height:1.5}
+
+/* ---------- game screen ---------- */
+.vp{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:10px;border:1px solid var(--line);background:#000;max-width:100%}
+.screen{position:absolute;left:0;top:0;width:1280px;height:720px;transform-origin:0 0;overflow:hidden;font-family:var(--f-game);-webkit-font-smoothing:antialiased}
+.scene{position:absolute;inset:0;background:
+  radial-gradient(ellipse 38% 26% at 63% 54%,rgba(255,186,120,.38),transparent 70%),
+  linear-gradient(180deg,#1b2336 0%,#363d52 30%,#76615a 52%,#4a3e2f 56%,#2d281c 76%,#1e1a13 100%)}
+.hill{position:absolute;left:0;right:0;bottom:0}
+.hill.h1{height:360px;background:linear-gradient(#3b3a2b,#1f1d15);clip-path:polygon(0 42%,10% 24%,22% 36%,37% 14%,52% 31%,66% 11%,80% 27%,92% 17%,100% 25%,100% 100%,0 100%)}
+.hill.h2{height:220px;background:linear-gradient(#211f16,#121109);clip-path:polygon(0 30%,15% 46%,30% 22%,48% 40%,63% 26%,78% 44%,100% 20%,100% 100%,0 100%)}
+.vignette{position:absolute;inset:0;background:radial-gradient(ellipse 75% 70% at 50% 45%,transparent 55%,rgba(0,0,0,.55))}
+.txt{color:#fff;text-shadow:1px 1px 0 #000}
+.uf{position:absolute;left:22px;top:70px;display:flex;gap:8px;align-items:center}
+.portrait{width:56px;height:56px;border-radius:50%;border:3px solid #7a5c32;box-shadow:0 0 0 1px #000;background:radial-gradient(circle at 45% 40%,#b48a6a,#4a3426)}
+.uf-name{font-size:12px;margin-bottom:3px}.uf-name span{color:var(--wow-gold);margin-left:6px}
+.ubar{width:140px;height:10px;border:1px solid #000;margin-top:2px}.ubar.hp{background:linear-gradient(#3ce04a,#1d8f27)}.ubar.mp{background:linear-gradient(#3b74ff,#1d3fa8)}
+.mm{position:absolute;right:20px;top:52px;width:176px;text-align:center}
+.mm-zone{font-size:12px;color:var(--wow-gold);margin-bottom:2px}
+.mm-box{position:relative;width:176px;height:176px}
+.mm-map{position:absolute;inset:13px;border-radius:50%;background:radial-gradient(circle at 40% 45%,#5d6b3a,#3a4425 60%,#2a301c)}
+.mm-frame{position:absolute;inset:0;background:var(--a-mmFrame) center/100% 100% no-repeat}
+.buffs{position:absolute;right:210px;top:70px;display:flex;gap:4px}
+.buffs img{width:28px;height:28px;border:1px solid #000}
+.abar{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:2px;padding:3px;border:11px solid transparent;border-image:var(--a-frame) 22 fill / 11px stretch}
+.slot{position:relative;width:40px;height:40px}
+.slot img{position:absolute;inset:2px;width:36px;height:36px}
+.slot::after{content:"";position:absolute;inset:-3px;background:var(--a-slot) center/100% 100% no-repeat}
+.gry{position:absolute;bottom:4px;width:120px;height:70px;background-size:100% 100%}
+.gry.l{left:-104px;background-image:var(--a-gryL)}.gry.r{right:-104px;background-image:var(--a-gryR)}
+.chat{position:absolute;left:22px;bottom:24px;width:360px;font-size:12px;line-height:1.5}
+.chat .y{color:#40ff40}.chat .gr{color:#00aa00}.chat .o{color:#ffff00}
+
+/* ---------- the dock ---------- */
+/* The outline is one path (layout() in the script): it leaves the screen edge in an S-curve on each side and runs
+   into the XP bar, whose top and bottom edges are the panel's lower border ("Im Rahmen"). Stroke colours are the
+   cross-section of the client's bronze window frame (ui-frame-metal-edge*-c60, bag and popup border). */
+.screen{--pad:9px;--side:52px}
+.dock{position:absolute;left:50%;top:0;z-index:20;width:var(--dw);height:var(--dh);--dy:0px;transform:translate(-50%,var(--dy));transition:transform .38s cubic-bezier(.22,.8,.24,1)}
+.dock.collapsed{--dy:calc(-1 * var(--cy))}
+.screen.bottom .dock{top:auto;bottom:0}
+.screen.bottom .dock.collapsed{--dy:var(--cy)}
+.shape,.rim{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.shape{z-index:0;filter:drop-shadow(0 3px 5px rgba(0,0,0,.65));transition:opacity .38s}
+.dock.collapsed .shape{opacity:0}   /* folded: not even the panel's shadow may peek over the screen edge */
+.rim{z-index:6}
+.screen.bottom .shape,.screen.bottom .rim{transform:scaleY(-1)}
+/* caps = the client frame edge bent along the curve (gen_caps.py), straight parts = the same edge strip repeated */
+.deco{position:absolute;left:0;top:0;pointer-events:none;z-index:6}
+.screen.bottom .deco{transform:scaleY(-1)}
+.deco i{position:absolute;display:block;background-repeat:no-repeat;background-size:auto 100%}
+.deco i.ed{background:var(--a-edgeStrip) 0 0/122px 16px repeat-x}
+.deco i.ed.thin{background:var(--a-edgeThin) 0 0/122px 11px repeat-x}
+/* border colour: in the addon the same desaturated edge gets SetVertexColor, here a filter stands in */
+.screen.rim-silver .deco{filter:grayscale(1) brightness(1.5) contrast(1.05)}
+.screen.rim-dark .deco{filter:grayscale(1) brightness(.6) contrast(1.25)}
+.deco i.mr{transform:scaleX(-1)}
+.deco i.fl{transform:scaleY(-1)}
+.band{position:absolute;left:0;top:0;height:var(--band-h);display:flex;align-items:stretch;padding:0 var(--side);z-index:2}
+.screen.bottom .band{top:auto;bottom:0}
+.cell{position:relative;display:flex;align-items:center;gap:5px;padding:0 var(--pad);font-size:12px;line-height:1;color:#fff;text-shadow:1px 1px 0 #000;white-space:nowrap;user-select:none;-webkit-user-select:none;touch-action:none;cursor:default;font-variant-numeric:tabular-nums}
+.cell::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:1px;background:linear-gradient(rgba(196,160,110,0),rgba(196,160,110,.6),rgba(196,160,110,0))}
+.screen.sp-dot .cell::before{top:50%;bottom:auto;left:-2px;width:4px;height:4px;margin-top:-2px;transform:rotate(45deg);background:#a3815a;box-shadow:0 0 0 1px #000}
+.screen.sp-none .cell::before,.cell.lead::before{display:none}
+.cell:hover{background:linear-gradient(rgba(255,210,120,0),rgba(255,210,120,.12))}
+.cell.dragging{opacity:.28}
+.cell img{width:16px;height:16px;flex:none;border:1px solid #000;border-radius:2px;box-shadow:0 0 0 1px rgba(184,146,90,.35)}
+.cell .pos{color:#1eff00}.cell .lbl{color:var(--wow-gold)}
+.cell .dot{width:6px;height:6px;border-radius:50%;background:#1eff00;box-shadow:0 0 4px #1eff00}
+.cell .caret{color:var(--wow-gold);font-size:9px;margin-left:1px}
+.cell .live{min-width:3.4em}
+.coin{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 2px 0 1px;vertical-align:-.5px;background:radial-gradient(circle at 35% 30%,#fff6c0,#e8b830 55%,#8a6510);box-shadow:0 0 0 1px rgba(0,0,0,.6)}
+.coin.s{background:radial-gradient(circle at 35% 30%,#fff,#c3c6cf 55%,#666a73)}
+.coin.c{background:radial-gradient(circle at 35% 30%,#ffd2a8,#c8753a 55%,#6b3510)}
+.pin{width:22px;display:grid;place-items:center;color:#9a8662;background:none;border:0;cursor:pointer;margin-left:4px;padding:0}
+.pin svg{width:13px;height:13px;transform:rotate(40deg);transition:transform .2s,color .2s;filter:drop-shadow(1px 1px 0 #000)}
+.pin[aria-pressed="true"]{color:var(--wow-gold)}.pin[aria-pressed="true"] svg{transform:none}
+.pin:focus-visible{outline:1px solid var(--wow-gold);outline-offset:-3px}
+.marker{position:absolute;top:3px;bottom:3px;width:2px;border-radius:1px;background:var(--wow-gold);box-shadow:0 0 6px var(--wow-gold);z-index:4}
+.ghost{position:absolute;z-index:60;pointer-events:none;height:var(--band-h);display:flex;background:rgba(8,7,6,.94);border:1px solid #a3815a;border-radius:5px;margin:-1px;box-shadow:0 8px 20px rgba(0,0,0,.6)}
+.ghost .cell::before{display:none}
+
+/* XP bar, all layers from the client atlas: background, rested, quest preview, fill, frame, pips */
+.xp{position:absolute;z-index:3;cursor:default;background:rgba(5,4,3,.9)}
+.xp > i{position:absolute;top:0;bottom:0;left:0;display:block;background-repeat:no-repeat}
+.xp-bg{right:0;background:var(--a-xpBg) 0 0/100% 100%}
+.xp-rested,.xp-quest,.xp-fill{background-size:var(--bw) 100%}
+.xp-rested{background-image:var(--a-xpRested);opacity:.85;transition:left .6s,width .6s,background-position .6s}
+.xp-quest{background-image:var(--a-xpGold);opacity:.8;filter:saturate(1.7) brightness(1.05);transition:left .6s,width .6s,background-position .6s}
+.screen.qblue .xp-quest{background-image:var(--a-xpPred)}
+.xp-fill{background-image:var(--a-xpFill);transition:width .6s cubic-bezier(.3,.7,.3,1)}
+.xp-spark{width:10px;margin-left:-5px;background:radial-gradient(closest-side,rgba(255,236,255,.9),rgba(200,140,255,0));transition:left .6s cubic-bezier(.3,.7,.3,1)}
+.xp-frame{right:0;border-style:solid;border-color:transparent;border-width:0 16px;border-image:var(--a-xpFrame) 0 16 / 0 16px stretch}
+.xp-cap{left:auto!important;right:3px;width:60px;background:linear-gradient(90deg,rgba(255,217,119,0),rgba(255,232,160,.85));opacity:0;border-radius:0 6px 6px 0}
+.xp-flash{width:30%;opacity:0;background:linear-gradient(90deg,transparent,rgba(255,246,214,.95),transparent)}
+.pip{position:absolute;top:-1px;width:10px;height:14px;margin-left:-5px;background:var(--a-pip) 0 0/100% 100%;pointer-events:none;transition:left .6s}
+.xp:hover .pip{background-image:var(--a-pipHi)}
+.pip.q{filter:sepia(1) saturate(4) hue-rotate(5deg) brightness(1.15)}
+.xp.ready{filter:drop-shadow(0 0 3px rgba(255,200,70,.85))}
+.xp.ready .xp-quest{animation:qPulse 1.6s ease-in-out infinite}
+.xp.ready .xp-cap{animation:capPulse 1.6s ease-in-out infinite}
+.xp.flash .xp-flash{animation:sweep .85s ease-out}
+.xp.instant *{transition:none!important}
+@keyframes qPulse{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes capPulse{0%,100%{opacity:.15}50%{opacity:.9}}
+@keyframes sweep{0%{opacity:1;transform:translateX(-110%)}100%{opacity:1;transform:translateX(350%)}}
+
+/* tooltips and menu: the client's c60 tooltip nine-slice */
+.tip,.menu{position:absolute;z-index:70;border:7px solid transparent;border-image:var(--a-tip9) 7 fill / 7px stretch;font:12px/1.42 var(--f-game);color:#fff;text-shadow:1px 1px 0 #000;filter:drop-shadow(0 4px 10px rgba(0,0,0,.6))}
+.screen.tipdark .tip,.screen.tipdark .menu,.screen.tipdark .ghost{border-image:var(--a-tip9) 7 / 7px stretch;background:rgba(8,7,6,.9);background-clip:padding-box}
+.tip{min-width:210px;max-width:320px;padding:2px 4px;pointer-events:none}
+.tip .t{font-size:14px;color:#fff;margin-bottom:1px}
+.tip .row{display:flex;justify-content:space-between;gap:18px}
+.tip .gap{height:7px}
+.tip .g{color:var(--wow-grey)}.tip .ok{color:var(--wow-green)}.tip .bad{color:#ff2020}.tip .gold{color:var(--wow-gold)}.tip .blue{color:#4da6ff}.tip .ylw{color:#ffd100}
+.tip .ind{padding-left:10px}
+.menu{min-width:200px;padding:2px}
+.menu .mh{font-size:13px;color:var(--wow-gold);padding:3px 6px 5px}
+.menu button{display:flex;width:100%;align-items:center;gap:8px;padding:4px 6px;border:0;background:none;color:#fff;font:12px var(--f-game);text-shadow:1px 1px 0 #000;text-align:left;cursor:pointer}
+.menu button:hover,.menu button:focus-visible{background:linear-gradient(90deg,rgba(255,210,120,.18),rgba(255,210,120,0));outline:none}
+.menu img{width:18px;height:18px;border-radius:50%;border:1px solid #000;box-shadow:0 0 0 1px #8a6a3a}
+.menu .hint{margin-left:auto;color:var(--wow-grey);font-size:11px}
+.banner{position:absolute;left:0;right:0;top:170px;text-align:center;pointer-events:none;opacity:0}
+.banner b{display:block;font:400 44px/1 var(--f-game);color:var(--wow-gold);text-shadow:0 0 16px rgba(255,190,60,.7),2px 2px 0 #000}
+.banner span{display:block;margin-top:8px;font-size:15px;color:#fff;text-shadow:1px 1px 0 #000}
+.banner.show{animation:banner 2.4s ease forwards}
+@keyframes banner{0%{opacity:0;transform:scale(.9)}12%{opacity:1;transform:scale(1)}75%{opacity:1}100%{opacity:0}}
+
+/* ---------- mock controls ---------- */
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:18px}
+.group{background:var(--page-2);border:1px solid var(--line);border-radius:8px;padding:16px 18px;display:grid;gap:12px;align-content:start;min-width:0}
+.group h2,.notes h2{margin:0;font:400 18px/1.2 var(--f-title);color:var(--bronze-hi)}
+.field{display:grid;gap:5px;font-size:13px;color:var(--ink-dim)}
+.field .lb{display:flex;justify-content:space-between}
+.field output{color:var(--ink);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--bronze)}
+input[type=checkbox]{accent-color:var(--bronze);width:15px;height:15px;margin:0}
+.check{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink)}
+.seg{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:6px;overflow:hidden;width:max-content;max-width:100%}
+.seg button{border:0;background:transparent;color:var(--ink-dim);font:500 13px var(--f-page);padding:6px 12px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:rgba(184,146,90,.18);color:var(--bronze-hi)}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1px solid #6b5230;background:linear-gradient(#3a2c14,#22190b);color:var(--bronze-hi);font:500 13px var(--f-page);padding:7px 12px;border-radius:5px;cursor:pointer}
+.btn:hover{border-color:var(--bronze)}
+.btn.sec{background:transparent;color:var(--ink);border-color:var(--line)}
+button:focus-visible{outline:2px solid var(--bronze-hi);outline-offset:2px}
+.state{margin:0;font-size:13px;color:var(--ink-dim)}.state b{color:var(--ink);font-weight:600}
+.els{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 12px}
+.notes{color:var(--ink-dim);font-size:14px;line-height:1.55}
+.notes ul{margin:8px 0 0;padding-left:18px;max-width:82ch}
+.notes code{font-size:12.5px;color:var(--ink)}
+@media (prefers-reduced-motion:reduce){
+  .dock,.xp-fill,.xp-spark,.xp-rested,.xp-quest,.pip{transition-duration:.01s!important}
+  .xp.ready .xp-quest,.xp.ready .xp-cap{animation:none}.xp.ready .xp-cap{opacity:.6}
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs><symbol id="i-tack" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M5.8 2h4.4l-.6 4 2.2 2.2H4.2L6.4 6z"/><path d="M8 8.2V14.5"/></symbol></defs>
+</svg>
+
+<div class="wrap">
+  <header>
+    <h1>Infopanel mit XP-Leiste</h1>
+    <p>Mockup für das neue Forever-Addon, gebaut aus den Original-Texturen des Forever-Clients: Rand im Profil des Bronze-Fensterrahmens, XP-Leisten-Atlanten, Tooltip-Rahmen, Item-Icons und die Spielschrift. Fahr mit der Maus über das Panel oder den XP-Streifen oben, zieh Elemente zum Umsortieren und halte die Maus über die XP-Leiste. Alle Werte sind Beispieldaten.</p>
+  </header>
+
+  <div class="vp" id="vp">
+    <div class="screen" id="screen">
+      <div class="scene"></div><div class="hill h1"></div><div class="hill h2"></div><div class="vignette"></div>
+      <div class="uf txt"><div class="portrait"></div><div><div class="uf-name">Aerilyn<span>23</span></div><div class="ubar hp"></div><div class="ubar mp"></div></div></div>
+      <div class="buffs" id="buffs"></div>
+      <div class="mm txt"><div class="mm-zone">Rotkammgebirge</div><div class="mm-box"><div class="mm-map"></div><div class="mm-frame"></div></div></div>
+      <div class="chat txt">
+        <div class="y">[Gilde] [Brannoc]: jemand Lust auf Todesminen?</div>
+        <div class="gr">Ihr erhaltet Beute: [Gnollkriegsperlen].</div>
+        <div class="o">Erfahrung erhalten: 1.850.</div>
+      </div>
+      <div class="abar" id="abar"><i class="gry l"></i><i class="gry r"></i></div>
+
+      <div class="dock" id="dock">
+          <svg class="shape" id="shape" aria-hidden="true"><defs><pattern id="pbg" patternUnits="userSpaceOnUse" width="384" height="384"><image id="pbgImg" width="384" height="384"/></pattern></defs><path id="shFill" fill="url(#pbg)"/><path id="shDark" fill="rgba(6,5,4,.74)"/></svg>
+          <div class="band" id="band">
+            <i class="marker" id="marker" hidden></i>
+            <button class="pin" id="pin" type="button" aria-pressed="false" aria-label="Panel fixieren"><svg viewBox="0 0 16 16"><use href="#i-tack"/></svg></button>
+          </div>
+          <div class="xp" id="xp">
+            <i class="xp-bg"></i>
+            <i class="xp-rested" id="xpRested"></i>
+            <i class="xp-quest" id="xpQuest"></i>
+            <i class="xp-fill" id="xpFill"></i>
+            <i class="xp-spark" id="xpSpark"></i>
+            <i class="xp-cap"></i>
+            <i class="xp-flash"></i>
+            <span class="pip" id="pipR"></span>
+            <span class="pip q" id="pipQ"></span>
+          </div>
+          <canvas class="deco" id="deco" aria-hidden="true"></canvas>
+      </div>
+
+      <div class="tip" id="tip" hidden></div>
+      <div class="menu" id="menu" hidden></div>
+      <div class="banner" id="banner"><b id="bannerLvl">Stufe 24</b><span>Ihr habt eine neue Stufe erreicht!</span></div>
+    </div>
+  </div>
+
+  <section class="controls" aria-label="Mock-Steuerung">
+    <div class="group">
+      <h2>XP-Leiste</h2>
+      <label class="field" for="ctl-p"><span class="lb">Aktuelle XP <output id="o-p"></output></span><input type="range" id="ctl-p" min="0" max="99.9" step="0.1"></label>
+      <label class="field" for="ctl-r"><span class="lb">Erholt <output id="o-r"></output></span><input type="range" id="ctl-r" min="0" max="60" step="0.5"></label>
+      <label class="field" for="ctl-q"><span class="lb">XP fertiger Quests <output id="o-q"></output></span><input type="range" id="ctl-q" min="0" max="80" step="0.5"></label>
+      <div class="field"><span class="lb">Farbe der Quest-Vorschau</span><div class="seg" data-key="qcol"><button type="button" data-v="gold">Gold</button><button type="button" data-v="blue">Blau (Vorhersage)</button></div></div>
+      <div class="btns">
+        <button class="btn" id="btn-turnin" type="button">Quests abgeben</button>
+        <button class="btn sec" id="btn-ready" type="button">Quests reichen</button>
+        <button class="btn sec" id="btn-short" type="button">Quests reichen nicht</button>
+      </div>
+    </div>
+    <div class="group">
+      <h2>Panel</h2>
+      <div class="field"><span class="lb">XP-Leiste</span><div class="seg" data-key="style"><button type="button" data-v="edge">Im Rahmen</button><button type="button" data-v="rail">Eigene Leiste darunter</button></div></div>
+      <div class="field"><span class="lb">Randfarbe</span><div class="seg" data-key="rim"><button type="button" data-v="bronze">Bronze</button><button type="button" data-v="silver">Silber</button><button type="button" data-v="dark">Dunkelgrau</button></div></div>
+      <div class="field"><span class="lb">Trenner</span><div class="seg" data-key="sp"><button type="button" data-v="line">Linie</button><button type="button" data-v="dot">Raute</button><button type="button" data-v="none">Keine</button></div></div>
+      <label class="field" for="ctl-bw"><span class="lb">Breite der XP-Leiste <output id="o-bw"></output></span><input type="range" id="ctl-bw" min="200" max="1200" step="10"></label>
+      <label class="field" for="ctl-pad"><span class="lb">Abstand links/rechts je Element <output id="o-pad"></output></span><input type="range" id="ctl-pad" min="2" max="20" step="1"></label>
+      <div class="field"><span class="lb">Position</span><div class="seg" data-key="pos"><button type="button" data-v="top">Oben</button><button type="button" data-v="bottom">Unten</button></div></div>
+      <div class="field"><span class="lb">Tooltip-Hintergrund</span><div class="seg" data-key="tipbg"><button type="button" data-v="dark">Dunkel</button><button type="button" data-v="orig">Bronze-braun (Textur pur)</button></div></div>
+      <label class="check" for="ctl-pin"><input type="checkbox" id="ctl-pin"> Panel fixieren (fährt nicht ein)</label>
+      <label class="field" for="ctl-delay"><span class="lb">Einfahren nach <output id="o-delay"></output></span><input type="range" id="ctl-delay" min="1" max="10" step="0.5"></label>
+      <p class="state">Zustand: <b id="state">Ausgefahren</b></p>
+    </div>
+    <div class="group">
+      <h2>Elemente</h2>
+      <div class="els" id="els"></div>
+    </div>
+  </section>
+
+  <section class="notes">
+    <h2>Woher die Grafiken kommen</h2>
+    <ul>
+      <li>Rand: das Profil des Bronze-Fensterrahmens <code>ui-frame-metal-edge*-c60</code> (Taschen- und Popup-Rahmen), Für die S-Kurven und die spitzen Enden der XP-Leiste wird genau diese Textur entlang der Kurve gebogen (Kappen-Grafiken, rechts gespiegelt). Die geraden Stücke sind dieselbe Textur, gekachelt. Genau diese Kappen kommen später als TGA ins Addon. Die XP-Leiste hat eine schmalere Fassung derselben Textur.</li>
+      <li>Randfarbe: Im Mockup färbt ein Filter um. Im Addon wird der Rand entsättigt mitgeliefert und per <code>SetVertexColor</code> bronze, silbern oder dunkelgrau eingefärbt. Bronze bleibt dabei die Originaltextur.</li>
+      <li>XP-Leiste: <code>ui-hud-experiencebar-*-c60</code> (Hintergrund, Füllung, Erholt, Pips). Die Quest-Vorschau nutzt wahlweise <code>fill-artifactpower-c60</code> (gold) oder <code>fill-prediction-c60</code> (blau).</li>
+      <li>Tooltip: <code>tooltip-nineslice-*-c60</code>. Ob Forever den braunen Mittelteil im Spiel abdunkelt, prüfe ich anhand eines Screenshots.</li>
+      <li>Im Addon werden diese Atlanten nur per Name referenziert, das Addon liefert keine Blizzard-Grafik mit.</li>
+      <li>Spielerrahmen und Landschaft sind nur Kulisse. „Händlergunst“ bleibt ein Platzhalter, bis die API geklärt ist.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+(() => {
+  const A = /*__ASSETS__*/{};
+  const root = document.documentElement;
+  for (const [k, v] of Object.entries(A)) if (!k.startsWith('i_') && k !== 'font') root.style.setProperty('--a-' + k, `url("${v}")`);
+  if (A.font && window.FontFace) new FontFace('Friz', `url(${A.font})`).load().then(f => { document.fonts.add(f); requestAnimationFrame(syncWidth); }).catch(() => {});
+  const icon = n => A['i_' + n] || '';
+
+  const $ = s => document.querySelector(s);
+  const vp = $('#vp'), scr = $('#screen'), dock = $('#dock'), frame = $('#frame'), band = $('#band'),
+        xp = $('#xp'), tip = $('#tip'), menu = $('#menu'), marker = $('#marker'), pinBtn = $('#pin');
+  const L = { rested: $('#xpRested'), quest: $('#xpQuest'), fill: $('#xpFill'), spark: $('#xpSpark'), pipR: $('#pipR'), pipQ: $('#pipQ') };
+
+  let scale = 1;
+  const fit = () => { scale = vp.clientWidth / 1280; scr.style.transform = `scale(${scale})`; };
+  new ResizeObserver(fit).observe(vp); fit();
+
+  const BAR = ['inv_misc_rune_01', 'inv_misc_map_01', 'inv_misc_book_09', 'inv_misc_gear_01', 'trade_blacksmithing', 'inv_misc_spyglass_02', 'inv_bannerpvp_02', 'inv_ammo_arrow_02', 'inv_scroll_03', 'inv_misc_pocketwatch_01', 'inv_gizmo_02', 'trade_engineering'];
+  const abar = $('#abar');
+  BAR.forEach(n => { const s = document.createElement('div'); s.className = 'slot'; s.innerHTML = `<img alt="" src="${icon(n)}">`; abar.appendChild(s); });
+  $('#buffs').innerHTML = ['inv_misc_book_09', 'inv_scroll_03', 'inv_misc_herb_07'].filter(icon).map(n => `<img alt="" src="${icon(n)}">`).join('');
+
+  const S = { level: 23, p: 53.8, r: 20, q: 27, xph: 18240, session: 8940, pinned: false, delay: 3, open: true,
+              style: 'edge', bw: 760, rim: 'bronze', sp: 'line', pad: 9, pos: 'top', qcol: 'gold', tipbg: 'dark', fps: 144, ms: 38, cx: 43.2, cy: 66.8, sw: 767, swOn: true };
+  const need = () => 23100 + (S.level - 23) * 1150;
+  const nf = n => Math.round(n).toLocaleString('de-DE');
+  const d1 = n => n.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const money = (c, noCopper) => {
+    const g = Math.floor(c / 10000), s = Math.floor(c / 100) % 100, k = c % 100; let o = '';
+    if (g) o += `${nf(g)}<i class="coin"></i> `;
+    if (g || s) o += `${s}<i class="coin s"></i> `;
+    if (!noCopper || !(g || s)) o += `${k}<i class="coin c"></i>`;
+    return o.trim();
+  };
+  const row = (a, b, ca = '', cb = '') => `<div class="row"><span class="${ca}">${a}</span><span class="${cb}">${b}</span></div>`;
+  const gap = '<div class="gap"></div>';
+  const hint = s => `<div class="ok">${s}</div>`;
+  const dur = mins => mins < 60 ? `${Math.max(1, Math.round(mins))} Min.` : `${Math.floor(mins / 60)} Std. ${Math.round(mins % 60)} Min.`;
+  const pad = n => String(n).padStart(2, '0');
+
+  const CHARS = [['Aerilyn', '#F58CBA', 482790], ['Brannoc', '#C79C6E', 1120415], ['Selwyn', '#3FC7EB', 98012]];
+  const ITEMS = [
+    { key: 'hearth', label: 'Ruhestein', icon: 'inv_misc_rune_01', on: true, text: () => 'Goldhain',
+      tip: () => `<div class="t">Ruhestein</div>${row('Goldhain, Wald von Elwynn', '', 'ylw')}${row('Abklingzeit', 'Bereit', '', 'ok')}${gap}${hint('Linksklick: Ruhestein benutzen')}` },
+    { key: 'gold', label: 'Gold', icon: 'inv_misc_coin_01', on: true, text: () => money(CHARS[0][2]),
+      tip: () => `<div class="t">Gold auf diesem Realm</div><div class="g">Allianz, alle Charaktere</div>${gap}${CHARS.map(c => row(`<span style="color:${c[1]}">${c[0]}</span>`, money(c[2]))).join('')}${gap}${row('Gesamt', money(CHARS.reduce((a, c) => a + c[2], 0)), 'ylw')}` },
+    { key: 'session', label: 'Gold dieser Sitzung', icon: 'inv_misc_coin_02', on: true, text: () => `<span class="pos">+${money(31240, true)}</span>`,
+      tip: () => `<div class="t">Diese Sitzung</div>${row('Eingenommen', money(54080))}${row('Ausgegeben', money(22840))}${gap}${row('Bilanz', '+' + money(31240), 'ylw', 'ok')}` },
+    { key: 'bags', label: 'Taschenplätze', icon: 'inv_misc_bag_08', on: true, text: () => '37/80',
+      tip: () => `<div class="t">Taschen</div>${row('Rucksack', '6/16')}${row('Runenstoffbeutel', '9/16')}${row('Runenstoffbeutel', '11/16')}${row('Runenstoffbeutel', '5/16')}${row('Seidener Beutel', '6/16')}${gap}${row('Frei', '37 von 80', 'ylw')}${hint('Linksklick: Alle Taschen öffnen')}` },
+    { key: 'mats', label: 'Materialtaschen', icon: 'inv_misc_bag_10', on: false, text: () => '12/24',
+      tip: () => `<div class="t">Materialtaschen</div>${row('Kräutertasche', '12/24 frei')}` },
+    { key: 'ammo', label: 'Munitionsplätze', icon: 'inv_ammo_arrow_02', on: false, text: () => '9/16',
+      tip: () => `<div class="t">Munition</div>${row('Leichter Köcher', '9/16 frei')}${row('Spitze Pfeile', '1.400')}` },
+    { key: 'honor', label: 'Ehre', icon: 'inv_bannerpvp_02', on: false, text: () => '1.250',
+      tip: () => `<div class="t">Ehre</div>${row('Diese Woche', '1.250')}${row('Ehrenhafte Siege', '38')}` },
+    { key: 'dura', label: 'Haltbarkeit', icon: 'trade_blacksmithing', on: true, text: () => '86 %',
+      tip: () => `<div class="t">Haltbarkeit</div>${row('Kettenbrustplatte', '61 %', '', 'ylw')}${row('Lederstiefel', '78 %')}${row('Breitschwert', '84 %')}${gap}${row('Reparaturkosten', money(18450))}${hint('Linksklick: Charakterfenster')}` },
+    { key: 'zone', label: 'Zone', icon: 'inv_misc_map_01', on: true, text: () => 'Rotkammgebirge',
+      tip: () => `<div class="t">Rotkammgebirge</div>${row('Seenhain', '', 'ylw')}${row('Stufe', '15–25')}${gap}${hint('Linksklick: Weltkarte')}` },
+    { key: 'coords', label: 'Koordinaten', icon: 'inv_misc_spyglass_02', on: false, text: () => `<span class="live">${d1(S.cx)} · ${d1(S.cy)}</span>`,
+      tip: () => `<div class="t">Koordinaten</div>${row('Rotkammgebirge', `${d1(S.cx)}, ${d1(S.cy)}`)}${gap}${hint('Linksklick: Position in den Chat')}` },
+    { key: 'favor', label: 'Händlergunst', icon: 'inv_scroll_03', on: false, text: () => 'Gunst 420',
+      tip: () => `<div class="t">Händlergunst</div><div class="g">Platzhalter, die API in Forever wird noch geklärt.</div>` },
+    { key: 'xph', label: 'XP pro Stunde', icon: 'inv_misc_book_09', on: true, text: () => `${nf(S.xph)} XP/h`,
+      tip: () => `<div class="t">Erfahrung pro Stunde</div>${row('Gemessen seit', 'Stufe ' + S.level)}${row('XP diese Sitzung', nf(S.session))}${row('Bis Stufe ' + (S.level + 1), dur((1 - S.p / 100) * need() / S.xph * 60))}` },
+    { key: 'clock', label: 'Uhrzeit', icon: 'inv_misc_pocketwatch_01', on: true, text: () => { const d = new Date(); return `<span class="live">${pad(d.getHours())}:${pad(d.getMinutes())}</span>`; },
+      tip: () => { const d = new Date(); return `<div class="t">Uhrzeit</div>${row('Ortszeit', `${pad(d.getHours())}:${pad(d.getMinutes())}`)}${row('Serverzeit', `${pad((d.getHours() + 23) % 24)}:${pad(d.getMinutes())}`)}${gap}${hint('Linksklick: Kalender')}`; } },
+    { key: 'watch', label: 'Stoppuhr', icon: 'inv_misc_pocketwatch_02', on: false, text: () => `<span class="live">${pad(Math.floor(S.sw / 3600))}:${pad(Math.floor(S.sw / 60) % 60)}:${pad(S.sw % 60)}</span>`,
+      tip: () => `<div class="t">Stoppuhr</div>${row('Status', S.swOn ? 'Läuft' : 'Pausiert', '', S.swOn ? 'ok' : 'g')}${gap}${hint('Linksklick: Start/Pause')}`,
+      click: () => { S.swOn = !S.swOn; } },
+    { key: 'latency', label: 'Latenz', icon: 'inv_gizmo_02', on: true, text: () => `<i class="dot"></i><span class="live">${S.ms} ms</span>`,
+      tip: () => `<div class="t">Latenz</div>${row('Heim', S.ms + ' ms', '', 'ok')}${row('Welt', (S.ms + 6) + ' ms', '', 'ok')}` },
+    { key: 'fps', label: 'FPS', icon: 'inv_misc_gear_01', on: false, text: () => `<span class="live">${S.fps} fps</span>`,
+      tip: () => `<div class="t">Bildrate</div>${row('Aktuell', S.fps + ' fps')}${row('Speicher (Addons)', '38,4 MB')}` },
+    { key: 'addons', label: 'Addons-Menü', icon: 'trade_engineering', on: true, text: () => 'Addons<span class="caret">▼</span>',
+      tip: () => `<div class="t">Addons</div>${hint('Linksklick: Gesammelte Minimap-Buttons')}`,
+      click: cell => toggleMenu(cell) },
+  ];
+  const ITEM = Object.fromEntries(ITEMS.map(i => [i.key, i]));
+
+  // ---------- cells ----------
+  ITEMS.forEach(it => {
+    const c = document.createElement('div');
+    c.className = 'cell'; c.dataset.key = it.key; c.hidden = !it.on;
+    c.innerHTML = `<img alt="" src="${icon(it.icon)}"><span class="tx"></span>`;
+    band.insertBefore(c, pinBtn);
+  });
+  const cells = () => [...band.querySelectorAll('.cell')];
+  const refreshLead = () => { let first = true; cells().forEach(c => { c.classList.toggle('lead', first && !c.hidden); if (!c.hidden) first = false; }); };
+  const updateCells = () => cells().forEach(c => { c.querySelector('.tx').innerHTML = ITEM[c.dataset.key].text(); });
+  refreshLead(); updateCells();
+
+  // ---------- tooltip / menu ----------
+  let tipFor = null, menuOpen = false;
+  function place(el, r) {
+    const sr = scr.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+    const x = Math.max(8, Math.min(1280 - w - 8, (r.left - sr.left) / scale));
+    const y = S.pos === 'top' ? (r.bottom - sr.top) / scale + 6 : (r.top - sr.top) / scale - h - 6;
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+  }
+  function showTip(html, key, rect) { tip.innerHTML = html; tip.hidden = false; tipFor = key; place(tip, rect); }
+  function hideTip() { tip.hidden = true; tipFor = null; }
+  function toggleMenu(cell) {
+    if (menuOpen) return closeMenu();
+    const addons = [['Questie', 'inv_misc_book_09'], ['Details!', 'inv_misc_spyglass_02'], ['Darkmoon Arcade', 'inv_misc_coin_02'], ['LFG Forever', 'inv_bannerpvp_02'], ['OneForAll', 'inv_misc_map_01'], ['Bagnon', 'inv_misc_bag_08']];
+    menu.innerHTML = '<div class="mh">Addons</div>' + addons.map(a => `<button type="button"><img alt="" src="${icon(a[1])}">${a[0]}<span class="hint">öffnen</span></button>`).join('');
+    hideTip(); menu.hidden = false; menuOpen = true; place(menu, cell.getBoundingClientRect());
+  }
+  function closeMenu() { if (!menuOpen) return; menu.hidden = true; menuOpen = false; if (!hover) scheduleClose(); }
+  document.addEventListener('pointerdown', e => { if (menuOpen && !menu.contains(e.target) && !e.target.closest('.cell[data-key="addons"]')) closeMenu(); });
+  menu.addEventListener('click', e => { if (e.target.closest('button')) closeMenu(); });
+
+  // ---------- slide in / out ----------
+  let closeT = null, hover = false;
+  const stateEl = $('#state');
+  function status() { stateEl.textContent = S.pinned ? 'Fixiert' : (S.open ? 'Ausgefahren' : 'Eingefahren'); }
+  function setOpen(v) { S.open = v; dock.classList.toggle('collapsed', !v); if (!v) { hideTip(); closeMenu(); } status(); }
+  function scheduleClose() {
+    clearTimeout(closeT);
+    if (S.pinned || !S.open) return;
+    closeT = setTimeout(() => { if (!hover && !menuOpen && !(drag && drag.on)) setOpen(false); }, S.delay * 1000);
+  }
+  dock.addEventListener('pointerenter', () => { hover = true; clearTimeout(closeT); if (!S.open) setOpen(true); });
+  dock.addEventListener('pointerleave', () => { hover = false; scheduleClose(); });
+  function setPinned(v) { S.pinned = v; pinBtn.setAttribute('aria-pressed', String(v)); $('#ctl-pin').checked = v; if (v) { clearTimeout(closeT); setOpen(true); } else if (!hover) scheduleClose(); status(); }
+  pinBtn.addEventListener('click', () => setPinned(!S.pinned));
+
+  // ---------- cell tooltips, clicks, drag & drop ----------
+  band.addEventListener('mouseover', e => {
+    const c = e.target.closest('.cell'); if (!c || (drag && drag.on) || menuOpen || tipFor === c.dataset.key) return;
+    showTip(ITEM[c.dataset.key].tip(), c.dataset.key, c.getBoundingClientRect());
+  });
+  band.addEventListener('mouseout', e => { const c = e.target.closest('.cell'); if (c && !c.contains(e.relatedTarget)) hideTip(); });
+  let drag = null, justDragged = false;
+  band.addEventListener('click', e => {
+    const c = e.target.closest('.cell'); if (!c || justDragged) return;
+    const it = ITEM[c.dataset.key]; if (it.click) { it.click(c); updateCells(); }
+  });
+  band.addEventListener('pointerdown', e => {
+    const c = e.target.closest('.cell'); if (!c || e.button !== 0) return;
+    drag = { c, x0: e.clientX, on: false };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp, { once: true });
+  });
+  function onMove(e) {
+    if (!drag) return;
+    if (!drag.on) { if (Math.abs(e.clientX - drag.x0) < 5) return; startDrag(e); }
+    moveDrag(e);
+  }
+  function startDrag(e) {
+    drag.on = true; hideTip(); closeMenu();
+    const r = drag.c.getBoundingClientRect(), sr = scr.getBoundingClientRect();
+    drag.off = (e.clientX - r.left) / scale;
+    const g = document.createElement('div'); g.className = 'ghost';
+    const clone = drag.c.cloneNode(true); clone.classList.remove('lead'); g.appendChild(clone);
+    g.style.top = ((r.top - sr.top) / scale) + 'px';
+    scr.appendChild(g); drag.g = g;
+    drag.c.classList.add('dragging'); marker.hidden = false;
+  }
+  function moveDrag(e) {
+    const sr = scr.getBoundingClientRect(), br = band.getBoundingClientRect();
+    drag.g.style.left = ((e.clientX - sr.left) / scale - drag.off) + 'px';
+    const list = cells().filter(c => !c.hidden && c !== drag.c);
+    drag.before = null;
+    for (const c of list) { const r = c.getBoundingClientRect(); if (e.clientX < r.left + r.width / 2) { drag.before = c; break; } }
+    const x = drag.before ? drag.before.getBoundingClientRect().left : (list.length ? list[list.length - 1].getBoundingClientRect().right : br.left);
+    marker.style.left = ((x - br.left) / scale - 1) + 'px';
+  }
+  function flip(mutate) {
+    const all = cells(), before = new Map(all.map(c => [c, c.getBoundingClientRect().left]));
+    mutate(); refreshLead();
+    all.forEach(c => {
+      const dx = (before.get(c) - c.getBoundingClientRect().left) / scale; if (!dx) return;
+      c.style.transition = 'none'; c.style.transform = `translateX(${dx}px)`;
+      requestAnimationFrame(() => requestAnimationFrame(() => { c.style.transition = 'transform .25s ease'; c.style.transform = ''; }));
+    });
+  }
+  function onUp() {
+    window.removeEventListener('pointermove', onMove);
+    if (drag && drag.on) {
+      const d = drag;
+      flip(() => band.insertBefore(d.c, d.before || pinBtn));
+      d.g.remove(); d.c.classList.remove('dragging'); marker.hidden = true;
+      justDragged = true; setTimeout(() => { justDragged = false; }, 0);
+    }
+    drag = null;
+    if (!hover) scheduleClose();
+  }
+
+  // ---------- outline: S-curves out of the screen edge, running into the XP bar ----------
+  // geometry must match gen_caps.py (which works at 2x)
+  const G = { F: 76, t: 11, h: 15, BH: 26 }, EXT = 14;
+  const IMG = {};
+  ['capPanel', 'capU', 'capUOpen', 'edgeStrip', 'edgeThin'].forEach(k => { const im = new Image(); im.onload = () => layout(); im.src = A[k] || ''; IMG[k] = im; });
+  $('#pbgImg').setAttribute('href', A.bgTex || '');
+  function layout() {
+    const rail = S.style === 'rail', bottom = S.pos === 'bottom', { F, t, h, BH } = G;
+    scr.style.setProperty('--side', Math.round(F * 0.6) + 'px');
+    const W = band.offsetWidth;
+    // The panel's S-curves end in a straight line (yp). "Im Rahmen": the XP bar hangs from that line, which is its
+    // top border; its own thinner border runs round the ends and along the bottom. Folded, the line goes off screen.
+    // "Darunter": the bar has a full thin border all round and sits a little below the line.
+    const yp = BH + 5, r = h / 2;
+    // the bar has its own width setting; it never gets wider than the panel's straight line allows
+    const minCx = rail ? F + 12 : F, maxBW = W - 2 * minCx + h, bwUse = Math.min(S.bw, maxBW);
+    $('#o-bw').textContent = S.bw > maxBW ? `${S.bw} px (begrenzt auf ${maxBW} px)` : `${S.bw} px`;
+    const cx = Math.round((W - bwUse) / 2 + r), pt = rail ? yp + 9 : yp;   // centre of the bar's round ends, bar top
+    const x0 = cx - r, x1 = W - cx + r, top = pt, H = pt + h + 8;
+    const e0 = cx + 20, e1 = W - cx - 20, yb = top + h, E = EXT;
+    // all border pieces go into one canvas at 2x, so caps and straight pieces meet on whole pixels without seams
+    const cv = $('#deco'), K = 2, g = cv.getContext('2d');
+    const L = 16;   // the lead-in of the curves reaches this far left/right of the panel, above the screen
+    cv.width = (W + 2 * L) * K; cv.height = (H + E) * K;
+    Object.assign(cv.style, { left: -L + 'px', width: (W + 2 * L) + 'px', height: (H + E) + 'px', top: -E + 'px', transformOrigin: `50% ${E + H / 2}px` });
+    g.setTransform(K, 0, 0, K, L * K, E * K);
+    if (Object.values(IMG).every(i => i.complete && i.naturalWidth)) {
+      const pic = (im, x, y, w, hh, mirror) => { g.save(); g.translate(x + (mirror ? w : 0), y); g.scale(mirror ? -1 : 1, 1); g.drawImage(im, 0, 0, w, hh); g.restore(); };
+      const strip = (im, x, y, w, hh, flip) => {
+        g.save(); g.translate(x, y + (flip ? hh : 0)); g.scale(1, flip ? -1 : 1);
+        const p = g.createPattern(im, 'repeat-x'); p.setTransform(new DOMMatrix().scale(1 / K)); g.fillStyle = p; g.fillRect(0, 0, w, hh); g.restore();
+      };
+      strip(IMG.edgeThin, e0, yb - 4.125, e1 - e0, 11);
+      if (rail) strip(IMG.edgeThin, e0, pt - 6.875, e1 - e0, 11, true);   // flipped: its inside faces down into the bar
+      const u = rail ? IMG.capU : IMG.capUOpen;
+      pic(u, cx - 13, pt - 8, 33, 31); pic(u, W - cx - 20, pt - 8, 33, 31, true);
+      strip(IMG.edgeStrip, 96, yp - 6, W - 192, 16);
+      pic(IMG.capPanel, -L, -E, 112, 56); pic(IMG.capPanel, W - 96, -E, 112, 56, true);
+    }
+    const fill = `M 0 -60 H ${W} V -7 C ${W - F / 2} -7 ${W - F / 2} ${yp} ${W - F} ${yp} H ${F} C ${F / 2} ${yp} ${F / 2} -7 0 -7 Z`;
+    const sh = $('#shape'); sh.setAttribute('width', W); sh.setAttribute('height', H + E); sh.setAttribute('viewBox', `0 ${-E} ${W} ${H + E}`);
+    Object.assign(sh.style, { top: -E + 'px', transformOrigin: `50% ${E + H / 2}px` });
+    $('#shFill').setAttribute('d', fill); $('#shDark').setAttribute('d', fill);
+    const w = x1 - x0;
+    Object.assign(xp.style, { left: x0 + 'px', width: w + 'px', height: h + 'px', top: (bottom ? H - yb : top) + 'px', clipPath: `inset(0 round ${r}px)` });
+    // folded: in the panel the line (and with it the bar's top border) leaves the screen; below, the bar keeps its border
+    scr.style.setProperty('--dw', W + 'px'); scr.style.setProperty('--dh', H + 'px'); scr.style.setProperty('--cy', (rail ? pt - 4 : yp + 5) + 'px');
+  }
+  new ResizeObserver(() => layout()).observe(band);
+
+  // ---------- XP bar ----------
+  // the fill textures are stretched over the whole bar and cut off, like SetTexCoord in the client
+  let bw = 600;
+  function syncWidth() { bw = xp.offsetWidth || bw; xp.style.setProperty('--bw', bw + 'px'); renderXP(); }
+  new ResizeObserver(syncWidth).observe(xp);
+  function renderXP() {
+    const restEnd = Math.min(100, S.p + S.r), qEnd = Math.min(100, S.p + S.q), off = -S.p / 100 * bw + 'px 0';
+    L.fill.style.width = S.p + '%'; L.spark.style.left = S.p + '%';
+    L.rested.style.left = S.p + '%'; L.rested.style.width = (restEnd - S.p) + '%'; L.rested.style.backgroundPosition = off;
+    L.quest.style.left = S.p + '%'; L.quest.style.width = (qEnd - S.p) + '%'; L.quest.style.backgroundPosition = off;
+    L.pipR.style.left = restEnd + '%'; L.pipR.hidden = !(S.r > 0) || restEnd >= 99.5;
+    L.pipQ.style.left = qEnd + '%'; L.pipQ.hidden = !(S.q > 0) || qEnd >= 99.5;
+    xp.classList.toggle('ready', S.q > 0 && S.p + S.q >= 100);
+    $('#o-p').textContent = d1(S.p) + ' %'; $('#o-r').textContent = d1(S.r) + ' %'; $('#o-q').textContent = d1(S.q) + ' %';
+    if (tipFor === 'xp') tip.innerHTML = xpTip();
+  }
+  const QUESTS = [['Die Gnolle von Rotkamm', .34], ['Ein Brief nach Seenhain', .27], ['Schatten über dem Seeufer', .22], ['Vorräte für die Wache', .17]];
+  function xpTip() {
+    const N = need(), cur = S.p / 100 * N, rest = S.r / 100 * N, q = S.q / 100 * N, left = N - cur, next = S.level + 1;
+    let h = `<div class="t">Stufe ${S.level}</div>`;
+    h += row('Erfahrung', `${nf(cur)} / ${nf(N)} (${d1(S.p)} %)`);
+    if (rest > 0) h += row('Erholt', `+${nf(rest)}`, 'blue', 'blue');
+    h += gap;
+    h += row('XP diese Sitzung', nf(S.session), 'ylw');
+    h += row('XP pro Stunde', nf(S.xph), 'ylw');
+    h += row('Zeit bis Stufe ' + next, dur(left / S.xph * 60), 'ylw');
+    h += gap;
+    if (q > 0) {
+      const n = Math.min(4, Math.max(1, Math.ceil(S.q / 8)));
+      const used = QUESTS.slice(0, n), sum = used.reduce((a, x) => a + x[1], 0);
+      h += row(`Fertige Quests (${n})`, '+' + nf(q), 'ylw', 'ylw');
+      used.forEach(x => { h += row(x[0], '+' + nf(q * x[1] / sum), 'g ind', 'g'); });
+      h += gap;
+      h += cur + q >= N
+        ? `<div class="ok">Reicht für Stufe ${next}, danach ${nf(cur + q - N)} XP übrig</div>`
+        : `<div class="bad">Reicht nicht, nach Abgabe fehlen noch ${nf(N - cur - q)} XP</div>`;
+    } else {
+      h += '<div class="g">Keine fertigen Quests im Questlog</div>';
+    }
+    return h;
+  }
+  const xpRect = e => { const r = xp.getBoundingClientRect(); return { left: e.clientX - 24, top: r.top, bottom: r.bottom }; };
+  xp.addEventListener('mousemove', e => { if (menuOpen) return; if (tipFor !== 'xp') showTip(xpTip(), 'xp', xpRect(e)); else place(tip, xpRect(e)); });
+  xp.addEventListener('mouseleave', hideTip);
+
+  let busy = false;
+  function turnIn() {
+    if (S.q <= 0 || busy) return;
+    const N = need(), total = S.p + S.q;
+    S.session += S.q / 100 * N; S.q = 0; $('#ctl-q').value = 0;
+    if (total < 100) { S.p = total; $('#ctl-p').value = S.p; renderXP(); return; }
+    busy = true; S.p = 100; renderXP();
+    setTimeout(() => {
+      xp.classList.add('flash');
+      const carryXP = (total - 100) / 100 * N;
+      S.level++; $('#bannerLvl').textContent = 'Stufe ' + S.level;
+      const b = $('#banner'); b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+      document.querySelector('.uf-name span').textContent = S.level;
+      xp.classList.add('instant'); S.p = 0; renderXP(); void xp.offsetWidth; xp.classList.remove('instant');
+      S.p = Math.min(99.9, carryXP / need() * 100); $('#ctl-p').value = S.p; renderXP();
+      setTimeout(() => { xp.classList.remove('flash'); busy = false; }, 900);
+    }, 650);
+  }
+
+  // ---------- controls ----------
+  const bindRange = (id, key) => { const el = $(id); el.value = S[key]; el.addEventListener('input', () => { S[key] = +el.value; renderXP(); updateCells(); }); };
+  bindRange('#ctl-p', 'p'); bindRange('#ctl-r', 'r'); bindRange('#ctl-q', 'q');
+  $('#btn-turnin').addEventListener('click', turnIn);
+  $('#btn-ready').addEventListener('click', () => { S.q = Math.min(80, Math.round((100 - S.p + 6) * 2) / 2); $('#ctl-q').value = S.q; renderXP(); });
+  $('#btn-short').addEventListener('click', () => { S.q = Math.max(0, Math.round((100 - S.p) * 0.55 * 2) / 2); $('#ctl-q').value = S.q; renderXP(); });
+  const delayEl = $('#ctl-delay');
+  delayEl.value = S.delay; $('#o-delay').textContent = d1(S.delay) + ' s';
+  delayEl.addEventListener('input', () => { S.delay = +delayEl.value; $('#o-delay').textContent = d1(S.delay) + ' s'; });
+  $('#ctl-pin').addEventListener('change', e => setPinned(e.target.checked));
+  const padEl = $('#ctl-pad');
+  const setPad = () => { S.pad = +padEl.value; scr.style.setProperty('--pad', S.pad + 'px'); $('#o-pad').textContent = S.pad + ' px'; };
+  padEl.value = S.pad; padEl.addEventListener('input', setPad); setPad();
+  const bwEl = $('#ctl-bw');
+  bwEl.value = S.bw; bwEl.addEventListener('input', () => { S.bw = +bwEl.value; layout(); });
+
+  const apply = {
+    style: v => { dock.classList.toggle('rail', v === 'rail'); hideTip(); layout(); },
+    rim: v => ['silver', 'dark'].forEach(c => scr.classList.toggle('rim-' + c, v === c)),
+    sp: v => { scr.classList.toggle('sp-dot', v === 'dot'); scr.classList.toggle('sp-none', v === 'none'); },
+    pos: v => { scr.classList.toggle('bottom', v === 'bottom'); hideTip(); closeMenu(); layout(); },
+    qcol: v => scr.classList.toggle('qblue', v === 'blue'),
+    tipbg: v => scr.classList.toggle('tipdark', v === 'dark'),
+  };
+  document.querySelectorAll('.seg').forEach(seg => {
+    const key = seg.dataset.key;
+    const sync = () => seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === S[key])));
+    seg.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S[key] = b.dataset.v; apply[key](S[key]); sync(); });
+    sync();
+  });
+
+  const els = $('#els');
+  ITEMS.forEach(it => {
+    const id = 'el-' + it.key, lab = document.createElement('label');
+    lab.className = 'check'; lab.htmlFor = id;
+    lab.innerHTML = `<input type="checkbox" id="${id}" ${it.on ? 'checked' : ''}> ${it.label}`;
+    lab.querySelector('input').addEventListener('change', e => {
+      band.querySelector(`.cell[data-key="${it.key}"]`).hidden = !e.target.checked; refreshLead(); hideTip(); closeMenu();
+    });
+    els.appendChild(lab);
+  });
+
+  // ---------- live values ----------
+  setInterval(() => {
+    S.fps = 138 + Math.round(Math.random() * 9);
+    S.ms = 34 + Math.round(Math.random() * 8);
+    S.cx = Math.min(99, Math.max(1, S.cx + (Math.random() - .5) * .2));
+    S.cy = Math.min(99, Math.max(1, S.cy + (Math.random() - .5) * .2));
+    if (S.swOn) S.sw++;
+    updateCells();
+    if (tipFor && tipFor !== 'xp') tip.innerHTML = ITEM[tipFor].tip();
+  }, 1000);
+
+  apply.tipbg(S.tipbg); layout(); syncWidth(); status();
+  // preview hashes: #xp-tooltip shows the XP tooltip, #rail the bar below, #collapsed the folded panel
+  if (location.hash === '#rail') { S.style = 'rail'; apply.style('rail'); document.querySelectorAll('.seg[data-key="style"] button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === 'rail'))); }
+  if (location.hash === '#collapsed') setOpen(false);
+  if (location.hash === '#colors') { apply.rim('silver'); }
+  if (location.hash === '#xp-tooltip') setTimeout(() => { const r = xp.getBoundingClientRect(); showTip(xpTip(), 'xp', { left: r.left + r.width * .45, top: r.top, bottom: r.bottom }); }, 400);
+})();
+</script>

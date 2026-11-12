@@ -1,0 +1,8 @@
+## Interface: 16001
+## Title: Forever QoL Panel
+## Notes: Info panel with an integrated XP bar and quality-of-life features for WoW: Forever.
+## Category: Quality of Life
+## Version: @project-version@
+## SavedVariables: ForeverQoLPanelDB
+
+Core.lua
