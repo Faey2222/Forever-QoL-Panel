@@ -46,8 +46,8 @@ A = {
     "slot": load("ui-hud-actionbar-iconframe-c60"),
     "gryL": load("ui-hud-actionbar-gryphon-left-c60"), "gryR": load("ui-hud-actionbar-gryphon-right-c60"),
     "mmFrame": load("ui-hud-minimap-frame-c60"),
-    "capEdge": load("cap-edge"), "capPanel": load("cap-panel"), "capTip": load("cap-tip"), "edgeStrip": load("edge-strip"),
-    "capU": load("cap-u"), "capUOpen": load("cap-u-open"), "edgeThin": load("edge-strip-thin"),
+    "capPanel": load("cap-panel"), "edgeStrip": load("edge"),
+    "capU": load("cap-bar"), "capUOpen": load("cap-bar-open"), "edgeThin": load("edge-bar-strip"),
 }
 for f in ICONS.glob("*.png"):
     A["i_" + f.stem] = Image.open(f).convert("RGBA")

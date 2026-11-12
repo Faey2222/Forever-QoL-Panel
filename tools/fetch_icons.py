@@ -6,10 +6,11 @@ import atlas_preview as ap
 out = pathlib.Path(__file__).resolve().parent / ".cache" / "icons"; out.mkdir(parents=True, exist_ok=True)
 names = sys.argv[1:]
 for n in names:
-    q = urllib.request.Request(f"https://wago.tools/api/files?search={n}", headers=ap.UA)
-    res = json.loads(urllib.request.urlopen(q, timeout=90).read())
+    q = urllib.request.Request(f"https://wago.tools/api/files?search={n.lower()}", headers=ap.UA)
+    res = json.loads(urllib.request.urlopen(q, timeout=90).read()) or {}
     fid = next((k for k, v in res.items() if v.lower() == f"interface/icons/{n}.blp"), None)
     if not fid: print("missing", n); continue
+    n = n.lower()
     try:
         im = ap.texture(fid)
     except Exception as e:

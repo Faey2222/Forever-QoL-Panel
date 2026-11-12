@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CACHE = ROOT / "tools" / ".cache"
-BUILD = "1.60.1.70245"
+BUILD = "1.60.1.70888"
 UA = {"User-Agent": "Mozilla/5.0"}
 
 
