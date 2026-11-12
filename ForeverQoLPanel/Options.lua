@@ -54,7 +54,11 @@ local PAGES = {
         for _, l in ipairs(LANGUAGES) do langs[#langs + 1] = { l[1], l[2] or L.LANG_AUTO } end
         return {
             header(L.SEC_GENERAL),
-            choice(L.OPT_LANGUAGE, L.OPT_LANGUAGE_TIP, root, "language", langs, nil, function(v) ns.SetLanguage(v) end),
+            choice(L.OPT_LANGUAGE, L.OPT_LANGUAGE_TIP, root, "language", langs, nil, function(v)
+                ns.SetLanguage(v)
+                -- panel cells keep their widest width; texts in another language start over
+                if ns.Elements and ns.Elements.ResetWidths then ns.Elements:ResetWidths() end
+            end),
             choice(L.OPT_MOTION, L.OPT_MOTION_TIP, root, "motion", { { "full", L.MOTION_FULL },
                 { "reduced", L.MOTION_REDUCED }, { "off", L.MOTION_OFF } }),
             header(L.WZ_OPEN),
@@ -253,6 +257,10 @@ end
 
 function O:Render(keepScroll)
     local f = self.frame
+    -- texts that are set here, not at creation: the language may change while the window is open
+    if f.closeButton then f.closeButton:SetText(L.CLOSE_BTN) end
+    if f.wizardButton then f.wizardButton:SetText(L.WZ_OPEN) end
+    if f.SetSearchHint then f:SetSearchHint(L.SEARCH_HINT) end
     local page = PAGES[self.index]
     -- list with group titles; navIndex -> page index
     local nav, map, group = {}, {}, nil
@@ -352,12 +360,12 @@ function O:Open(i)
         local f = ns.UI.Window("ForeverQoLPanelOptions", { width = 800, height = 600 })
         local close = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
         close:SetSize(120, 24)
-        close:SetText(CLOSE or "Close")
+        f.closeButton = close
         close:SetPoint("BOTTOMRIGHT", -12, 12)
         close:SetScript("OnClick", function() f:Hide() end)
         local wizard = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
         wizard:SetSize(180, 24)
-        wizard:SetText(L.WZ_OPEN)
+        f.wizardButton = wizard
         wizard:SetPoint("BOTTOMLEFT", 12, 12)
         wizard:SetScript("OnClick", function() ns.Wizard:Open(true) end)
         f.onLayout = function() O:Render(true) end
@@ -389,11 +397,13 @@ local function registerStub()
     f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.text:SetPoint("TOP", f.logo, "BOTTOM", 0, -16)
     f.text:SetWidth(420)
-    f.text:SetText(L.OPT_WINDOW_TEXT)
+    f:SetScript("OnShow", function(self)
+        self.text:SetText(L.OPT_WINDOW_TEXT)
+        self.button:SetText(L.OPT_OPEN_BTN)
+    end)
     f.button = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     f.button:SetSize(220, 28)
     f.button:SetPoint("TOP", f.text, "BOTTOM", 0, -16)
-    f.button:SetText(L.OPT_OPEN_BTN)
     f.button:SetScript("OnClick", function() O:Open() end)
     local category = Settings.RegisterCanvasLayoutCategory(f, ns.title)
     Settings.RegisterAddOnCategory(category)

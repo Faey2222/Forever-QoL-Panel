@@ -225,6 +225,8 @@ function Wz:Render()
     end
     for i = n + 1, #f.pips do f.pips[i]:Hide() end
     f.back:SetEnabled(self.index > 1)
+    f.back:SetText(L.WZ_BACK)
+    f.skip:SetText(L.WZ_SKIP)
     f.next:SetText(self.index == 1 and L.WZ_START or self.index == n and L.WZ_DONE or L.WZ_NEXT)
 end
 

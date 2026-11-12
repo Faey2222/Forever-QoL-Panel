@@ -220,6 +220,12 @@ function Window:EnableSearch(onSearch)
     self.navTop = 38
 end
 
+function Window:SetSearchHint(text)
+    local box = self.search
+    local hint = box and (rawget(box, "Instructions") or rawget(box, "instructions"))
+    if hint and hint.SetText then hint:SetText(text) end
+end
+
 function Window:SaveSize()
     ns.db.windows = ns.db.windows or {}
     ns.db.windows[self.windowName] = { w = math.floor(self:GetWidth() + 0.5), h = math.floor(self:GetHeight() + 0.5) }

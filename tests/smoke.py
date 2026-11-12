@@ -81,6 +81,10 @@ def main() -> int:
             end
         end
         assert(ns.Options.category, "settings stub missing")
+        -- language switch while the window is open: footer and wizard buttons follow
+        ns.SetLanguage("enUS"); ns.Options:Render(); ns.Wizard:Open(true); ns.Wizard:Finish()
+        assert(ns.L.CLOSE_BTN == "Close", "language switch")
+        ns.SetLanguage("auto"); ns.Options:Render()
         -- search across all pages
         ns.Options.query = "graue"; ns.Options:Render()
         assert(ns.Options.frame.pool.check and ns.Options.frame.pool.check.n >= 1, "search found nothing")
