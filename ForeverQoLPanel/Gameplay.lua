@@ -9,7 +9,7 @@ local function db() return ns.db.gameplay end
 local function on(key) return db().enabled and db()[key] end
 local function paused() return IsShiftKeyDown() end
 local function say(text) print("|cffffd100" .. ns.title .. "|r: " .. text) end
-local function money(c) return GetCoinTextureString and GetCoinTextureString(c, 11) or tostring(c) end
+local function money(c) return ns.Money(c) end
 
 local CC = C_Container
 local function bagSlots(bag) return (CC and CC.GetContainerNumSlots or GetContainerNumSlots)(bag) or 0 end
@@ -108,12 +108,19 @@ local function marker(self, b)
     local m = self.marks[b]
     if m then return m end
     m = {}
-    m.coin = b:CreateTexture(nil, "OVERLAY", nil, 7)
+    -- an own layer above the button: Blizzard's icon border and highlight lie over the button's own textures and
+    -- left the coin half see-through
+    local top = CreateFrame("Frame", nil, b)
+    top:SetAllPoints()
+    top:SetFrameLevel(b:GetFrameLevel() + 10)
+    m.coin = top:CreateTexture(nil, "OVERLAY", nil, 7)
     m.coin:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")
     m.coin:SetSize(18, 18)
+    m.coin:SetAlpha(1)
+    m.coin:SetVertexColor(1, 1, 1, 1)
     local icon = rawget(b, "Icon") or rawget(b, "icon")
     m.coin:SetPoint("TOPLEFT", icon or b, "TOPLEFT", -5, 5)
-    m.value = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    m.value = top:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     m.value:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -6, 4)
     self.marks[b] = m
     return m
@@ -272,19 +279,14 @@ local function lootAnchor()
     a.label:SetPoint("BOTTOM", a, "TOP", 0, 6)
     a.box:Hide(); a.label:Hide()
     a:RegisterForDrag("LeftButton")
-    a:SetScript("OnDragStart", function(self) if G.moving then self:StartMoving() end end)
+    a:SetScript("OnDragStart", function(self) if G.moving then ns.Mover:StartDrag(self) end end)
     a:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        self:SetUserPlaced(false)
-        local x, y = self:GetCenter()
-        local ux, uy = UIParent:GetCenter()
-        if x and ux then
-            local s = self:GetEffectiveScale() / UIParent:GetEffectiveScale()
-            db().lootPos = { math.floor(x * s - ux + 0.5), math.floor(y * s - uy + 0.5) }
-        end
+        ns.Mover:StopDrag()
+        -- onto the grid of the move mode (Mover.lua)
+        db().lootPos = { ns.Mover.SnapCenter(self) }
         G:PlaceLoot()
     end)
-    a:SetScript("OnMouseUp", function(_, button) if G.moving and button == "RightButton" then G:SetLootMoving(false) end end)
+    a:SetScript("OnMouseUp", function(_, button) if G.moving and button == "RightButton" then ns.Mover:Toggle(false) end end)
     a:EnableMouse(false)   -- only move mode takes the mouse
     G.anchor = a
     G:PlaceLoot()
@@ -364,7 +366,7 @@ function G:SetLootMoving(on)
     for _, f in ipairs(pool) do f:SetScript("OnUpdate", nil); f:Hide() end
     if self.moving then
         local samples = {
-            { "+" .. (GetCoinTextureString and GetCoinTextureString(12345) or "1g 23s 45c"), MONEY_ICON.gold },
+            { "+" .. ns.Money(12345), MONEY_ICON.gold },
             { "+2 " .. ns.L.LOOT_SAMPLE_ITEM, "Interface\\Icons\\INV_Misc_Herb_10" },
         }
         for i, s in ipairs(samples) do
@@ -406,7 +408,7 @@ function G:MoneyMessage(msg)
     local copper = moneyOf(msg)
     local icon = MONEY_ICON.copper
     if copper and copper >= 10000 then icon = MONEY_ICON.gold elseif copper and copper >= 100 then icon = MONEY_ICON.silver end
-    local text = copper and GetCoinTextureString and GetCoinTextureString(copper) or (msg:gsub("^[^%d]*", ""))
+    local text = copper and ns.Money(copper) or (msg:gsub("^[^%d]*", ""))
     floatText("+" .. text, icon)
 end
 

@@ -12,13 +12,16 @@ Core.lua
 Locale.lua
 Debug.lua
 XPBar.lua
+Reputation.lua
 Elements.lua
 Minimap.lua
 ActionBar.lua
 Nameplates.lua
 Gameplay.lua
+Mail.lua
 Warnings.lua
 Tooltip.lua
+Mover.lua
 Dock.lua
 UI.lua
 Options.lua

@@ -114,6 +114,7 @@ local function atMaxLevel()
     local maxLevel = (GetMaxPlayerLevel and GetMaxPlayerLevel()) or 60
     return (UnitLevel("player") or 1) >= maxLevel
 end
+XP.AtMaxLevel = atMaxLevel
 
 -- Quests ---------------------------------------------------------------------------
 
@@ -395,10 +396,16 @@ function XP:ApplySkin(modern)
     f.pipQ:SetVertexColor(GOLD[1], GOLD[2], GOLD[3])
 end
 
-function XP:SetGeometry(x, y, w, h)
+-- ctx: the holder of a bar set free (its own space), nil = the panel
+function XP:SetGeometry(x, y, w, h, ctx)
     local f = self.frame
+    local parent = ctx or ns.Dock
+    if f:GetParent() ~= parent then f:SetParent(parent) end
+    -- above the reputation bar and its border (+3, +4), below the bar borders on the rim (+6)
+    f:SetFrameLevel(parent:GetFrameLevel() + 5)
+    self.free = ctx ~= nil
     f:ClearAllPoints()
-    ns.Dock:Anchor(f, x, y)
+    if ctx then f:SetPoint("TOPLEFT", ctx, "TOPLEFT", x, -y) else ns.Dock:Anchor(f, x, y) end
     f:SetSize(w, h)
     self.w, self.h = w, h
     local step = ns.db.panel.ticks or 0
@@ -504,8 +511,11 @@ function XP:UpdateStatus()
     st.text:SetText(table.concat(parts, gap .. "|cffa0a0a0·|r" .. gap))
     st:ClearAllPoints()
     if below then
-        -- away from the screen edge: below the bar at the top, above it at the bottom
-        if p.position == "bottom" then st:SetPoint("BOTTOM", f, "TOP", 0, 6) else st:SetPoint("TOP", f, "BOTTOM", 0, -6) end
+        -- away from the screen edge: below the bar at the top, above it at the bottom; past the reputation strip
+        local rep = ns.Rep and ns.Rep.frame
+        local ref = rep and rep:IsShown() and (rep.status:IsShown() and ns.db.panel.repTextPos == "below" and rep.status or rep) or f
+        if p.position == "bottom" and not self.free then st:SetPoint("BOTTOM", ref, "TOP", 0, 6)
+        else st:SetPoint("TOP", ref, "BOTTOM", 0, -6) end
     else
         -- the classic fill has an empty row at its bottom edge, so its visible middle sits half a unit higher than the
         -- frame's; the flat modern bar fills the frame exactly

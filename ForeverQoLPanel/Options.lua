@@ -16,6 +16,7 @@ local function db(name) return function() return name and ns.db[name] or ns.db e
 local panel, opts = db("panel"), function() return ns.db.panel.opt end
 local minimap, actionbar, gameplay = db("minimap"), db("actionbar"), db("gameplay")
 local nameplates, warnings, tooltip, root = db("nameplates"), db("warnings"), db("tooltip"), db(nil)
+local layout = db("layout")
 
 -- value accessors for a spec
 local function bind(s, tbl, key, onChange)
@@ -61,9 +62,40 @@ local PAGES = {
             end),
             choice(L.OPT_MOTION, L.OPT_MOTION_TIP, root, "motion", { { "full", L.MOTION_FULL },
                 { "reduced", L.MOTION_REDUCED }, { "off", L.MOTION_OFF } }),
+            header(L.SEC_MOVE),
+            buttons(L.OPT_MOVE, L.OPT_MOVE_TIP, { { L.OPT_WARN_MOVE_BTN, function() ns.Mover:Toggle(true) end } }),
+            check(L.MOVE_GRID, nil, layout, "grid"),
+            check(L.MOVE_SNAP, L.OPT_SNAP_TIP, layout, "snap"),
+            slider(L.OPT_GRID_SIZE, nil, "gridSize", 8, 64, 4, " px", nil, layout),
             header(L.WZ_OPEN),
             buttons(L.WZ_OPEN, L.WZ_OPEN_TIP, { { L.WZ_OPEN_BTN, function() ns.Wizard:Open(true) end } }),
         }
+    end },
+
+    -- the characters the addon knows; ones that no longer exist can be removed (gold overview, mail list ...)
+    { group = "NAV_GENERAL", icon = "Interface\\Icons\\INV_Misc_GroupNeedMore", title = "SEC_CHARS", build = function()
+        local list = { { type = "text", label = L.CHARS_TIP } }
+        local me, myRealm = UnitName("player"), GetRealmName()
+        local lastRealm
+        for _, c in ipairs(ns.Characters()) do
+            local realm, faction, name, e = c[1], c[2], c[3], c[4]
+            if realm ~= lastRealm then list[#list + 1] = header(ns.ShortRealm(realm)); lastRealm = realm end
+            local col = RAID_CLASS_COLORS and RAID_CLASS_COLORS[e.class or ""]
+            local full = ns.CharName(name, e)
+            local label = (col and col.colorStr and ("|c" .. col.colorStr .. full .. "|r") or full)
+                .. (e.level and ("  |cff9d9d9d" .. L.LVL_N:format(e.level) .. "|r") or "")
+            local tip = (FACTION_ALLIANCE and faction == "Alliance" and FACTION_ALLIANCE)
+                or (FACTION_HORDE and faction == "Horde" and FACTION_HORDE) or faction
+            if name == me and realm == myRealm then
+                list[#list + 1] = { type = "text", label = label .. "  |cff9d9d9d(" .. L.CHARS_YOU .. ")|r" }
+            else
+                list[#list + 1] = buttons(label, tip, { { L.CHARS_REMOVE, function()
+                    ns.RemoveCharacter(realm, faction, name)
+                    O:Render(true)
+                end } })
+            end
+        end
+        return list
     end },
 
     -- Interface --------------------------------------------------------------------------------------------------
@@ -100,6 +132,7 @@ local PAGES = {
             zone = { { "zoneCoords", L.OPT_ZONE_COORDS } },
             xph = { { "xphTime", L.OPT_XPH_TIME, L.OPT_XPH_TIME_TIP } },
             clock = { { "serverTime", L.OPT_SERVER_TIME }, { "minimapClock", L.OPT_MM_CLOCK, nil, true } },
+            addons = { { "addonsIconOnly", L.OPT_ADDONS_ICON } },
         }
         local items = function() return ns.db.panel.items end
         -- one card per theme; elements of other classes (ammo, soul shards) are left out
@@ -124,6 +157,9 @@ local PAGES = {
         for _, n in ipairs({ 5, 10, 20, 25 }) do ticks[#ticks + 1] = { n, L.TICKS_N:format(n) } end
         return {
             header(L.SEC_LAYOUT),
+            choice(L.OPT_XP_PLACE, L.OPT_XP_PLACE_TIP, panel, "xpPlace", { { "panel", L.PLACE_PANEL }, { "free", L.PLACE_FREE } }, X),
+            buttons(L.OPT_POS_RESET, nil, { { L.OPT_WARN_MOVE_BTN, function() ns.Mover:Toggle(true) end },
+                { L.OPT_WARN_RESET_BTN, function() ns.db.panel.xpPos = nil; ns.Refresh() end } }, { "xpbar", "xpfree" }),
             choice(L.OPT_STYLE, L.OPT_STYLE_TIP, panel, "style", { { "edge", L.STYLE_EDGE }, { "rail", L.STYLE_RAIL } }, X),
             slider(L.OPT_GAP, L.OPT_GAP_TIP, "gap", 4, 40, 1, " px", { "xpbar", "rail" }),
             slider(L.OPT_WIDTH, L.OPT_WIDTH_TIP, "barWidth", 200, 2000, 10, " px", X),
@@ -147,6 +183,30 @@ local PAGES = {
             check(L.OPT_LOG, L.OPT_LOG_TIP, panel, "logPreview", X),
             header(L.SEC_BLIZZARD),
             check(L.OPT_HIDE_BLIZZ, L.OPT_HIDE_BLIZZ_TIP, panel, "hideBlizzardXP", X),
+        }
+    end },
+    { group = "NAV_INTERFACE", icon = "Interface\\Icons\\INV_Misc_Note_02", title = "SEC_REP",
+        master = { panel, "repBar", tip = "OPT_REPBAR_TIP", needs = { "panel" } }, build = function()
+        local R, T = { "repbar" }, { "repbar", "reptext" }
+        local ticks = { { 0, L.NONE } }
+        for _, n in ipairs({ 5, 10, 20, 25 }) do ticks[#ticks + 1] = { n, L.TICKS_N:format(n) } end
+        return {
+            header(L.SEC_LAYOUT),
+            choice(L.OPT_REP_PLACE, L.OPT_REP_PLACE_TIP, panel, "repPlace", { { "attach", L.REP_ATTACH },
+                { "below", L.REP_BELOW }, { "free", L.PLACE_FREE } }, R),
+            buttons(L.OPT_POS_RESET, nil, { { L.OPT_WARN_MOVE_BTN, function() ns.Mover:Toggle(true) end },
+                { L.OPT_WARN_RESET_BTN, function() ns.db.panel.repPos = nil; ns.Refresh() end } }, { "repbar", "repfree" }),
+            slider(L.OPT_REP_WIDTH, L.OPT_REP_WIDTH_TIP, "repWidth", 50, 100, 5, " %", R),
+            choice(L.OPT_TICKS, nil, panel, "repTicks", ticks, R),
+            header(L.SEC_XPTEXT),
+            check(L.OPT_XPTEXT, nil, panel, "repText", R),
+            check(L.OPT_REPTEXT_NAME, nil, panel, "repTextName", T, { indent = true }),
+            check(L.OPT_REPTEXT_STANDING, nil, panel, "repTextStanding", T, { indent = true }),
+            check(L.OPT_REPTEXT_VALUES, nil, panel, "repTextValues", T, { indent = true }),
+            check(L.OPT_XPTEXT_PERCENT, nil, panel, "repTextPercent", T, { indent = true }),
+            choice(L.OPT_XPTEXT_POS, L.OPT_XPTEXT_POS_TIP, panel, "repTextPos", { { "on", L.XPTEXT_ON }, { "below", L.XPTEXT_BELOW } },
+                T, nil, true),
+            slider(L.OPT_XPTEXT_SIZE, nil, "repTextSize", 7, 14, 1, " pt", T, panel, true),
         }
     end },
     { group = "NAV_INTERFACE", icon = "Interface\\Icons\\INV_Misc_Map_01", title = "WZ_MINIMAP", build = function()
@@ -188,6 +248,8 @@ local PAGES = {
             check(L.OPT_GP_GUILD, nil, gameplay, "guildRepair", G, { indent = true }),
             header(L.SEC_LOOT),
             check(L.OPT_GP_FASTLOOT, L.OPT_GP_FASTLOOT_TIP, gameplay, "fastLoot", G),
+            header(L.SEC_MAIL),
+            check(L.OPT_GP_MAILALTS, L.MAIL_ALTS_TIP, gameplay, "mailAlts", G),
         }
     end },
 
@@ -220,7 +282,7 @@ local PAGES = {
             choice(L.OPT_WARN_SHAPE, nil, warnings, "iconShape", SHAPES(), Wd),
             slider(L.OPT_WARN_SCALE, nil, "scale", 0.5, 2, 0.05, "x", Wd, warnings),
             buttons(L.OPT_WARN_MOVE, L.OPT_WARN_MOVE_TIP, {
-                { L.OPT_WARN_MOVE_BTN, function() ns.Warnings:SetMoving(not ns.Warnings.moving) end },
+                { L.OPT_WARN_MOVE_BTN, function() ns.Mover:Toggle(true) end },
                 { L.OPT_WARN_PREVIEW_BTN, function()
                     if not ns.Warnings.moving then ns.Warnings:SetMoving(true) end
                     ns.Warnings:PreviewAnim()
@@ -237,7 +299,7 @@ local PAGES = {
             choice(L.OPT_WARN_SHAPE, nil, gameplay, "lootShape", SHAPES(), T),
             slider(L.OPT_WARN_SCALE, nil, "lootScale", 0.5, 2, 0.05, "x", T, gameplay),
             buttons(L.OPT_WARN_MOVE, L.OPT_LOOT_MOVE_TIP, {
-                { L.OPT_WARN_MOVE_BTN, function() ns.Gameplay:SetLootMoving(not ns.Gameplay.moving) end },
+                { L.OPT_WARN_MOVE_BTN, function() ns.Mover:Toggle(true) end },
                 { L.OPT_WARN_RESET_BTN, function() ns.Gameplay:ResetLootPosition() end },
             }, T),
         }

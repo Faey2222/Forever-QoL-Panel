@@ -96,7 +96,9 @@ local function store()
     local m = GetMoney()
     ns.db.gold[realm] = ns.db.gold[realm] or {}
     ns.db.gold[realm][faction] = ns.db.gold[realm][faction] or {}
-    ns.db.gold[realm][faction][me] = { money = m, class = select(2, UnitClass("player")) }
+    -- also the character list of the mail recipient picker (Mail.lua); full = the name mail needs
+    ns.db.gold[realm][faction][me] = { money = m, class = select(2, UnitClass("player")), level = UnitLevel("player"),
+        full = ns.FullName() }
     if lastMoney then
         local d = m - lastMoney
         local s = S()
@@ -111,7 +113,7 @@ def("gold", {
     text = function() return money(GetMoney()) end,
     tip = function(tt)
         header(tt, L.GOLD_REALM)
-        tt:AddLine(fmt("%s, %s", realm or "?", faction or "?"), 0.62, 0.62, 0.62)
+        tt:AddLine(fmt("%s, %s", ns.ShortRealm(realm) or "?", faction or "?"), 0.62, 0.62, 0.62)
         local chars, total = {}, 0
         for name, e in pairs(ns.db.gold[realm] and ns.db.gold[realm][faction] or {}) do
             chars[#chars + 1] = { name, e }
@@ -686,7 +688,12 @@ def("fps", {
 def("addons", {
     icon = "Interface\\Icons\\Trade_Engineering",
     -- the gold chevron of Blizzard's dropdowns
-    text = function() return L.ADDONS .. " |A:dropdown-hover-arrow:8:12:0:-1|a" end,
+    -- setting addonsIconOnly: just the icon and the chevron
+    text = function()
+        local arrow = "|A:dropdown-hover-arrow:8:12:0:-1|a"
+        if opt("addonsIconOnly") then return arrow end
+        return L.ADDONS .. " " .. arrow
+    end,
     tip = function(tt)
         header(tt, L.ADDONS)
         tt:AddLine(fmt(L.BUTTONS_COLLECTED, ns.Minimap:CollectedCount()), 0.62, 0.62, 0.62)

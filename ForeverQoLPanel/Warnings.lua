@@ -265,13 +265,16 @@ W.frames = {}
 
 local function link() return db().link end   -- { follower, leader, side } or nil (default: consumables below buffs)
 
-local function savePosition(f)
+-- snapped: dropped in move mode, onto the grid (Mover.lua)
+local function savePosition(f, snapped)
     local x, y = f:GetCenter()
     local ux, uy = UIParent:GetCenter()
     if not (x and ux) then return end
     local s = f:GetEffectiveScale() / UIParent:GetEffectiveScale()
+    local cx, cy = math.floor(x * s - ux + 0.5), math.floor(y * s - uy + 0.5)
+    if snapped then cx, cy = ns.Mover.SnapCenter(f) end
     db().pos = db().pos or {}
-    db().pos[f.group] = { "CENTER", "CENTER", math.floor(x * s - ux + 0.5), math.floor(y * s - uy + 0.5) }
+    db().pos[f.group] = { "CENTER", "CENTER", cx, cy }
 end
 
 local function anchor(f)
@@ -325,16 +328,15 @@ local function startDrag(f)
     l = link()
     local mover = (l and l.follower == f.group) and W.frames[l.leader] or f
     W.dragging = mover
-    mover:StartMoving()
+    ns.Mover:StartDrag(mover)   -- follows the cursor, on the grid
 end
 
 local function stopDrag()
     local f = W.dragging
     if not f then return end
     W.dragging = nil
-    f:StopMovingOrSizing()
-    f:SetUserPlaced(false)
-    savePosition(f)
+    ns.Mover:StopDrag()
+    savePosition(f, true)
     if not link() then
         local o = W.frames[OTHER[f.group]]
         local side = snapSide(f, o)
@@ -371,7 +373,7 @@ local function createFrame(group)
     -- drag and mouse scripts switch the mouse on: off again, so the warnings never catch clicks outside move mode
     f:SetScript("OnDragStart", startDrag)
     f:SetScript("OnDragStop", stopDrag)
-    f:SetScript("OnMouseUp", function(_, button) if W.moving and button == "RightButton" then W:SetMoving(false) end end)
+    f:SetScript("OnMouseUp", function(_, button) if W.moving and button == "RightButton" then ns.Mover:Toggle(false) end end)
     f:EnableMouse(false)
     W.frames[group] = f
     return f

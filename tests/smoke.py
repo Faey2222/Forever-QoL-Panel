@@ -122,7 +122,7 @@ def main() -> int:
         SlashCmdList.FOREVERQOLPANEL("ranks"); SlashCmdList.FOREVERQOLPANEL("place")
         MOCK_fire("PLAYER_ENTERING_WORLD", true, false)
         -- gameplay, nameplates, warnings, tooltips, wizard
-        MerchantFrame.shown = false   -- Blizzard shows its frame after the event
+        MerchantFrame._shown = false   -- Blizzard shows its frame after the event
         MOCK_fire("MERCHANT_SHOW"); MOCK_runTimers()
         assert(MOCK_used == 1, "grey item not sold"); assert(MOCK_repaired, "not repaired")
         GetNumQuestChoices = function() return 2 end; GetQuestItemLink = function() return "item:1" end
@@ -213,6 +213,52 @@ def main() -> int:
         ns.Elements:UpdateTexts(); ns.Elements.defs.mail.tip(GameTooltip)
         assert(ns.Elements.cells.mail.pulsing, "new mail does not glow")
         HasNewMail = function() return false end; ns.Elements:UpdateTexts()
+        -- reputation strip: a watched faction adds it in both skins, the tooltip reads it
+        GetWatchedFactionInfo = function() return "Darnassus", 5, 3000, 9000, 4500 end
+        for _, skin in ipairs({ "classic", "modern" }) do
+            ForeverQoLPanelDB.panel.skin = skin; ns.Dock.width = nil; ns.Dock:Relayout()
+            assert(ns.Rep:Active() and ns.Rep.frame:IsShown(), "no reputation strip (" .. skin .. ")")
+        end
+        ns.Rep:ShowTooltip(ns.Rep.frame)
+        -- at the highest level (and without the XP bar) it takes the XP bar's place
+        local realLevel = UnitLevel
+        UnitLevel = function() return 60 end
+        for _, skin in ipairs({ "classic", "modern" }) do
+            ForeverQoLPanelDB.panel.skin = skin; ns.Dock.width = nil; ns.Dock:Relayout()
+            assert(ns.Dock:RepInSlot() and not ns.Dock.bar:IsShown() and ns.Rep.h == (skin == "classic" and 15 or 10), "rep bar not in the XP slot ("
+                .. skin .. ") " .. tostring(ns.Dock:RepInSlot()) .. tostring(ns.Dock.bar:IsShown()) .. tostring(ns.Rep.h) .. "/" .. tostring(ns.XP.h)
+                .. " max " .. tostring(GetMaxPlayerLevel and GetMaxPlayerLevel()))
+        end
+        UnitLevel = realLevel; ns.Dock.width = nil; ns.Dock:Relayout()
+        -- placements: attached, below, free; the XP bar set free; move mode with the grid
+        local P = ForeverQoLPanelDB.panel
+        for _, skin in ipairs({ "classic", "modern" }) do
+            P.skin = skin
+            for _, place in ipairs({ "attach", "below", "free" }) do
+                P.repPlace = place; ns.Dock.width = nil; ns.Dock:Relayout()
+                assert(ns.Rep.frame:IsShown(), "no reputation bar (" .. skin .. ", " .. place .. ")")
+                assert((place == "free") == ns.Dock.repHolder:IsShown(), "reputation holder (" .. place .. ")")
+            end
+            P.xpPlace = "free"; P.repPlace = "attach"; ns.Dock.width = nil; ns.Dock:Relayout()
+            assert(ns.Dock.xpHolder:IsShown() and ns.XP.free and ns.Rep.free, "XP bar not free (" .. skin .. ")")
+            P.xpPlace = "panel"; ns.Dock.width = nil; ns.Dock:Relayout()
+            assert(not ns.Dock.xpHolder:IsShown() and not ns.XP.free, "XP bar not back on the panel")
+        end
+        P.skin = "classic"; P.repPlace = "attach"
+        ns.Mover:Toggle(true); assert(ns.Mover.active and ns.Warnings.moving and ForeverQoLPanelGrid:IsShown(), "move mode not on")
+        local sx, sy = ns.Mover.SnapCenter(ns.Dock.xpHolder)
+        ns.Mover:Toggle(false); assert(not ns.Mover.active and not ns.Warnings.moving, "move mode stuck")
+        ns.Mail:Alts(); ns.FullName()
+        -- removing a character that no longer exists
+        local before = #ns.Characters()
+        local c = ns.Characters()[1]
+        if c then ns.RemoveCharacter(c[1], c[2], c[3]); assert(#ns.Characters() == before - 1, "character not removed") end
+        assert(not ns.Dock:RepInSlot() and ns.Dock.bar:IsShown(), "XP bar not back below max level")
+        GetWatchedFactionInfo = function() return nil end; ns.Dock.width = nil; ns.Dock:Relayout()
+        assert(not ns.Rep.frame:IsShown(), "reputation strip without a faction")
+        ForeverQoLPanelDB.panel.skin = "classic"; ns.Dock.width = nil; ns.Dock:Relayout()
+        -- mail recipient picker lists the other characters
+        ns.Mail:Alts()
         IsResting = function() return true end; ForeverQoLPanelDB.warnings.hideResting = true; ns.Warnings:Update()
         ForeverQoLPanelDB.warnings.hideResting = false
         -- quests enough for the level: the preview runs into the bar's round end

@@ -10,7 +10,7 @@ local function on(key) return db().enabled and db()[key] end
 local L = setmetatable({}, { __index = function(_, k) return ns.L[k] end })
 local LINE = Enum and Enum.TooltipDataLineType or {}
 
-local function money(c) return GetCoinTextureString and GetCoinTextureString(c, 11) or tostring(c) end
+local function money(c) return ns.Money(c) end
 
 -- Item counts per character --------------------------------------------------------
 
@@ -166,20 +166,39 @@ local function nodes()
     return nodeMap
 end
 
--- my rank in a profession, by the profession's (localized) name
+-- My rank in a profession. The profession list by skill line ID first (independent of language and of collapsed
+-- headers in the skill window), the skill window's lines by name only where the client has no profession list.
+-- nil = unknown (shown neutral, never as "too low").
 local PROFESSION = { herb = 2372, mine = 2575, skin = 8613 }
+local SKILL_LINE = { herb = 182, mine = 186, skin = 393 }
 local function rank(kind)
     local wanted = ns.SpellName(PROFESSION[kind])
+    if GetProfessions and GetProfessionInfo then
+        local found = false
+        for _, index in pairs({ GetProfessions() }) do
+            if index then
+                found = true
+                local name, _, r, _, _, _, line = GetProfessionInfo(index)
+                if line == SKILL_LINE[kind] or (name and name == wanted) then return r, name or wanted end
+            end
+        end
+        if found then return 0, wanted end
+    end
     if not wanted or not GetNumSkillLines then return nil, wanted end
+    local headers = 0
     for i = 1, GetNumSkillLines() do
-        local n, header, _, r = GetSkillLineInfo(i)
+        local n, header, expanded, r = GetSkillLineInfo(i)
+        if header and not expanded then headers = headers + 1 end
         if not header and n == wanted then return r, wanted end
     end
+    -- a collapsed header may hide it
+    if headers > 0 then return nil, wanted end
     return 0, wanted
 end
 
 local function skillColor(mine, need)
-    if not mine or mine < need then return 1, 0.13, 0.13 end
+    if not mine then return 0.8, 0.8, 0.8 end
+    if mine < need then return 1, 0.13, 0.13 end
     if mine < need + 25 then return 1, 0.5, 0.25 end
     if mine < need + 50 then return 1, 1, 0 end
     if mine < need + 100 then return 0.25, 0.75, 0.25 end
@@ -188,6 +207,8 @@ end
 
 local function skillLine(tt, kind, need)
     local mine, prof = rank(kind)
+    ns.Debug.Set("gatherSkill", { kind = kind, mine = mine, need = need, prof = prof,
+        api = GetProfessions and "professions" or GetNumSkillLines and "skilllines" or "none" })
     local r, g, b = skillColor(mine, need)
     tt:AddLine(L.TT_SKILL:format(prof or "?", need), r, g, b)
     tt:Show()

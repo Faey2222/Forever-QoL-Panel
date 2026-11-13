@@ -2,7 +2,7 @@
 local timers, handlers = {}, {}
 
 function obj(kind)
-    local o = { kind = kind, shown = true, scripts = {}, w = 10, h = 10 }
+    local o = { kind = kind, _shown = true, scripts = {}, w = 10, h = 10 }
     return setmetatable(o, { __index = function(t, k)
         local f = rawget(_G, "MOCK_" .. k)
         if f then return f end
@@ -28,9 +28,14 @@ MOCK_SetSize = function(self, w, h) self.w, self.h = w, h end
 MOCK_IsOwned = function() return false end
 MOCK_IsPlaying = function() return false end
 MOCK_IsMouseOver = function() return false end
-MOCK_IsShown = function(self) return self.shown end
-MOCK_Show = function(self) self.shown = true end
-MOCK_Hide = function(self) self.shown = false end
+MOCK_IsShown = function(self) return self._shown end
+MOCK_Show = function(self) self._shown = true end
+MOCK_Hide = function(self)
+    local was = self._shown
+    self._shown = false
+    if was and self.scripts.OnHide then self.scripts.OnHide(self) end
+end
+MOCK_SetShown = function(self, v) self._shown = v and true or false end
 MOCK_GetEffectiveScale = function() return 1 end
 MOCK_GetChildren = function() end
 MOCK_GetParent = function(self) return self.parent or UIParent end
@@ -38,6 +43,7 @@ MOCK_SetScript = function(self, name, fn) self.scripts[name] = fn end
 MOCK_RegisterEvent = function(self, ev) handlers[ev] = self end
 
 UIParent = obj("Frame")
+GetCursorPosition = function() return 520, 380 end
 Minimap = obj("Minimap")
 function hooksecurefunc() end
 function GetBuildInfo() return "1.60.1", "70245", "", 16001 end

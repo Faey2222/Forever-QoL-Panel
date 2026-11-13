@@ -2,7 +2,7 @@ local ADDON, ns = ...
 
 ns.name = ADDON
 ns.title = "Forever QoL Panel"
-ns.VERSION = "1.1.3"   -- the setup wizard shows the pages of features newer than the last version seen
+ns.VERSION = "1.2.0"   -- the setup wizard shows the pages of features newer than the last version seen
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\media\\"
 
 function ns.Tex(name)
@@ -24,6 +24,77 @@ end
 function ns.ItemCount(item, bank)
     if C_Item and C_Item.GetItemCount then return C_Item.GetItemCount(item, bank) or 0 end
     return GetItemCount and GetItemCount(item, bank) or 0
+end
+
+-- The character's full name. Forever characters have a first and a last name; the client keeps the last name where
+-- other clients keep the realm ("Kelandrik-Avornbart"), and mail needs both. What each API returns is noted in the
+-- debug data.
+function ns.FullName()
+    local name, suffix = UnitName("player")
+    local fn, fr
+    if UnitFullName then fn, fr = UnitFullName("player") end
+    local gun = GetUnitName and GetUnitName("player", true)
+    if ns.Debug and ns.Debug.Set then
+        ns.Debug.Set("names", { unitName = name, unitSuffix = suffix, fullName = fn, fullRealm = fr, getUnitName = gun,
+            realm = GetRealmName and GetRealmName(), normalized = GetNormalizedRealmName and GetNormalizedRealmName() })
+    end
+    -- a last name has no spaces; realm names like "CAMWOW EU4 Realm 6 PvP" do
+    local function lastName(v) return v and v ~= "" and v ~= GetRealmName() and not v:find(" ", 1, true) and v or nil end
+    local last = lastName(suffix) or lastName(fr) or lastName(gun and gun:match("%-(.+)$"))
+    -- mail takes "First Last" with a space (the hyphen is only the client's internal spelling)
+    if last and name then return name .. " " .. last end
+    return name
+end
+
+-- A realm name as its type only: "CAMWOW EU4 Realm 6 PvP" -> "PvP", "CAMWOW EU5 Realm 9 RP PvP" -> "RP-PvP"
+function ns.ShortRealm(realm)
+    if not realm then return nil end
+    local kind = realm:match("Realm%s+%d+%s+(.+)$")
+    if kind then return (kind:gsub("%s+", "-")) end
+    return realm
+end
+
+-- First and last name of a known character (the first name alone until it has logged in with 1.2.0)
+function ns.CharName(name, e)
+    return e and e.full and (e.full:gsub("%-", " ", 1)) or name
+end
+
+-- Characters the addon knows (from the gold overview): { realm, faction, name, entry }, sorted by realm and name.
+function ns.Characters()
+    local list = {}
+    for realm, factions in pairs(ns.db.gold or {}) do
+        for faction, chars in pairs(factions) do
+            for name, e in pairs(chars) do list[#list + 1] = { realm, faction, name, e } end
+        end
+    end
+    table.sort(list, function(a, b) if a[1] ~= b[1] then return a[1] < b[1] end return a[3] < b[3] end)
+    return list
+end
+
+-- Forgets a character that no longer exists: gold overview (also the mail list), bag counts, session, action bar.
+function ns.RemoveCharacter(realm, faction, name)
+    local g = ns.db.gold and ns.db.gold[realm]
+    if g and g[faction] then g[faction][name] = nil end
+    if ns.db.items and ns.db.items[realm] then ns.db.items[realm][faction .. ":" .. name] = nil end
+    local key = name .. "-" .. realm
+    if ns.db.session then ns.db.session[key] = nil end
+    if ns.db.actionbar and ns.db.actionbar.seen then ns.db.actionbar.seen[key] = nil end
+end
+
+-- Money with coin icons ("9 [silver] 20 [copper]"), like the game shows it. Forever has no GetCoinTextureString, so
+-- the string is built here. size: icon size, 0 = the font's height.
+function ns.Money(c, size)
+    c = math.floor(c or 0)
+    size = size or 0
+    local g, s, k = math.floor(c / 10000), math.floor(c / 100) % 100, c % 100
+    local function coin(n, kind)
+        return n .. "|TInterface\\MoneyFrame\\UI-" .. kind .. "Icon:" .. size .. ":" .. size .. ":2:0|t"
+    end
+    local parts = {}
+    if g > 0 then parts[#parts + 1] = coin(BreakUpLargeNumbers and BreakUpLargeNumbers(g) or g, "Gold") end
+    if s > 0 then parts[#parts + 1] = coin(s, "Silver") end
+    if k > 0 or #parts == 0 then parts[#parts + 1] = coin(k, "Copper") end
+    return table.concat(parts, " ")
 end
 
 function ns.ItemIcon(item)
@@ -72,6 +143,12 @@ ns.defaults = {
         delay = 3,               -- seconds until the panel folds up
         pinned = false,
         hideBlizzardXP = true,
+        repBar = true,           -- reputation bar below the XP bar, for the watched faction
+        repWidth = 85, repTicks = 10,
+        repPlace = "attach",     -- attach (hangs from the XP bar), below (own bar), free (move mode places it)
+        xpPlace = "panel",       -- panel or free; xpPos / repPos: centre offsets of bars set free        -- its width in % of the XP bar, tick marks
+        repText = true, repTextName = true, repTextStanding = true, repTextValues = false, repTextPercent = false,
+        repTextPos = "on", repTextSize = 8,
         collectButtons = true,   -- minimap buttons of other addons go into the panel's addon menu
         order = { "hearth", "gold", "session", "bags", "mail", "materials", "ammo", "shards", "durability", "honor", "pvp", "favor", "zone",
             "coords", "xph", "clock", "stopwatch", "latency", "fps", "addons" },
@@ -83,14 +160,16 @@ ns.defaults = {
         opt = {
             xphTime = false,     -- XP/h also shows the time to the next level
             zoneCoords = false,  -- zone also shows the coordinates
+            addonsIconOnly = false,   -- the addon menu shows only its icon and the arrow
             minimapClock = true, -- Blizzard's clock at the minimap stays
             serverTime = false,  -- the clock shows the realm time
         },
     },
     minimap = { show = true, angle = 205, keep = {}, floating = true },   -- floating: collector button without panel
     actionbar = { enabled = true, placeNew = true, replaceRanks = true, general = false, messages = true, seen = {} },
+    layout = { grid = true, snap = true, gridSize = 32 },   -- move mode (Mover.lua)
     gameplay = { enabled = true, questAccept = true, questTurnIn = true, gossip = true, rewardValue = true, sellGrey = true,
-        repair = true, guildRepair = true, fastLoot = true, lootText = true,
+        repair = true, guildRepair = true, fastLoot = true, lootText = true, mailAlts = true,
         lootShape = "panel", lootScale = 1 },   -- lootPos: own place of the loot text
     nameplates = { enabled = true, position = "left", progress = true, size = 20, x = 0, y = 0 },
     warnings = { enabled = true, classBuffs = true, food = true, weapon = true, expiring = true, sound = false,
@@ -323,6 +402,8 @@ SlashCmdList.FOREVERQOLPANEL = function(msg)
     elseif cmd == "ticks" and (num == 0 or num == 5 or num == 10 or num == 20 or num == 25) then setting("ticks", num)
     elseif cmd == "pad" and num then setting("pad", math.max(2, math.min(20, num)))
     elseif cmd == "gap" and num then setting("gap", math.max(4, math.min(40, num)))
+    elseif cmd == "move" then
+        ns.Mover:Toggle()
     elseif cmd == "width" and num then setting("barWidth", math.max(200, math.min(2000, num)))
     elseif cmd == "delay" and num then setting("delay", math.max(0.5, math.min(30, num)))
     elseif cmd == "toggle" and arg and ns.db.panel.items[arg] ~= nil then
