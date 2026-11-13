@@ -31,9 +31,9 @@ end
 local function choice(label, tip, tbl, key, values, needs, onChange, indent)
     return bind({ type = "choice", label = label, tip = tip, values = values, needs = needs, indent = indent }, tbl, key, onChange)
 end
-local function slider(label, tip, key, min, max, step, suffix, needs, tbl)
+local function slider(label, tip, key, min, max, step, suffix, needs, tbl, indent)
     return bind({ type = "slider", label = label, tip = tip, min = min, max = max, step = step, suffix = suffix,
-        needs = needs }, tbl or panel, key)
+        needs = needs, indent = indent }, tbl or panel, key)
 end
 local function header(label) return { type = "header", label = label } end
 
@@ -88,6 +88,9 @@ local PAGES = {
             choice(L.OPT_SEP, L.OPT_SEP_TIP, panel, "separator", { { "line", L.SEP_LINE }, { "dot", L.SEP_DOT },
                 { "none", L.NONE } }, P),
             slider(L.OPT_PAD, L.OPT_PAD_TIP, "pad", 2, 20, 1, " px", P),
+            -- a test for the width animation, only in the development copy
+            ns.name == "ForeverQoLPanel_Dev" and buttons(L.OPT_TEST_WIDTH, L.OPT_TEST_WIDTH_TIP,
+                { { L.OPT_TEST_WIDTH_BTN, function() ns.Elements:TestWidths() end } }, P) or nil,
         }
     end },
     { group = "NAV_INTERFACE", icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", title = "SEC_ELEMENTS",
@@ -99,11 +102,17 @@ local PAGES = {
             clock = { { "serverTime", L.OPT_SERVER_TIME }, { "minimapClock", L.OPT_MM_CLOCK, nil, true } },
         }
         local items = function() return ns.db.panel.items end
-        local list = { { type = "text", label = L.ITEMS_TIP }, header(L.SEC_SHOWN) }
-        for _, key in ipairs(ns.defaults.panel.order) do
-            list[#list + 1] = check(L["ITEM_" .. key], nil, items, key, { "panel" })
-            for _, s in ipairs(SUB[key] or {}) do
-                list[#list + 1] = check(s[2], s[3], opts, s[1], not s[4] and { "panel", key } or nil, { indent = true })
+        -- one card per theme; elements of other classes (ammo, soul shards) are left out
+        local list = { { type = "text", label = L.ITEMS_TIP } }
+        for _, g in ipairs(ns.Elements:Grouped()) do
+            if #g[2] > 0 then
+                list[#list + 1] = header(g[1])
+                for _, key in ipairs(g[2]) do
+                    list[#list + 1] = check(L["ITEM_" .. key], nil, items, key, { "panel" })
+                    for _, s in ipairs(SUB[key] or {}) do
+                        list[#list + 1] = check(s[2], s[3], opts, s[1], not s[4] and { "panel", key } or nil, { indent = true })
+                    end
+                end
             end
         end
         return list
@@ -119,6 +128,16 @@ local PAGES = {
             slider(L.OPT_GAP, L.OPT_GAP_TIP, "gap", 4, 40, 1, " px", { "xpbar", "rail" }),
             slider(L.OPT_WIDTH, L.OPT_WIDTH_TIP, "barWidth", 200, 2000, 10, " px", X),
             choice(L.OPT_TICKS, nil, panel, "ticks", ticks, X),
+            header(L.SEC_XPTEXT),
+            check(L.OPT_XPTEXT, L.OPT_XPTEXT_TIP, panel, "xpText", X),
+            check(L.OPT_XPTEXT_VALUES, nil, panel, "xpTextValues", { "xpbar", "xptext" }, { indent = true }),
+            check(L.OPT_XPTEXT_PERCENT, nil, panel, "xpTextPercent", { "xpbar", "xptext" }, { indent = true }),
+            check(L.OPT_XPTEXT_TIME, L.OPT_XPTEXT_TIME_TIP, panel, "xpTextTime", { "xpbar", "xptext" }, { indent = true }),
+            check(L.OPT_XPTEXT_RESTED, nil, panel, "xpTextRested", { "xpbar", "xptext" }, { indent = true }),
+            choice(L.OPT_XPTEXT_POS, L.OPT_XPTEXT_POS_TIP, panel, "xpTextPos", { { "on", L.XPTEXT_ON }, { "below", L.XPTEXT_BELOW } },
+                { "xpbar", "xptext" }, nil, true),
+            slider(L.OPT_XPTEXT_SIZE, nil, "xpTextSize", 8, 16, 1, " pt", { "xpbar", "xptext" }, panel, true),
+            slider(L.OPT_XPTEXT_GAP, L.OPT_XPTEXT_GAP_TIP, "xpTextGap", 1, 6, 1, "", { "xpbar", "xptext" }, panel, true),
             header(L.SEC_PREVIEW),
             check(L.OPT_DONE, L.OPT_DONE_TIP, panel, "questPreview", X),
             choice(L.OPT_QSTYLE, L.OPT_QSTYLE_TIP, panel, "questStyle", { { "veil", L.QSTYLE_VEIL }, { "frame", L.QSTYLE_FRAME },
@@ -186,10 +205,13 @@ local PAGES = {
             check(L.OPT_WARN_FLASK, L.OPT_WARN_FLASK_TIP, warnings, "flask", Wd),
             choice(L.OPT_WARN_WHERE, nil, warnings, "flaskWhere", WHERE_FLASK(), { "warnings", "flask" }, nil, true),
             check(L.OPT_WARN_WEAPON, L.OPT_WARN_WEAPON_TIP, warnings, "weapon", Wd),
+            check(L.OPT_WARN_AMMO, L.OPT_WARN_AMMO_TIP, warnings, "ammo", { "warnings", "hunter" }),
+            slider(L.OPT_WARN_AMMO_MIN, L.OPT_WARN_AMMO_MIN_TIP, "ammoMin", 100, 800, 50, "", { "warnings", "ammo", "hunter" }, warnings, true),
             header(L.SEC_BEHAVIOUR),
             check(L.OPT_WARN_COMBAT, L.OPT_WARN_COMBAT_TIP, warnings, "combat", Wd),
             check(L.OPT_WARN_SOUND, nil, warnings, "sound", Wd),
             check(L.OPT_WARN_WINDOWS, L.OPT_WARN_WINDOWS_TIP, warnings, "hideWithWindows", Wd),
+            check(L.OPT_WARN_RESTING, L.OPT_WARN_RESTING_TIP, warnings, "hideResting", Wd),
             choice(L.OPT_WARN_ANIM, L.OPT_WARN_ANIM_TIP, warnings, "anim", { { "pulse", L.ANIM_PULSE }, { "bounce", L.ANIM_BOUNCE },
                 { "flash", L.ANIM_FLASH }, { "wave", L.ANIM_WAVE }, { "none", L.NONE } }, Wd, function() ns.Warnings:PreviewAnim() end),
             choice(L.OPT_WARN_REPEAT, L.OPT_WARN_REPEAT_TIP, warnings, "animRepeat", { { "once", L.REPEAT_ONCE },

@@ -49,8 +49,9 @@ end
 
 -- Shows the part a..b (0..1) of an atlas horizontally, like the client cuts its own status bars.
 local MODERN = {
-    bg = { 0, 0, 0, 0.55 }, fill = { 0.16, 0.44, 0.92, 1 }, rested = { 0.07, 0.2, 0.55, 1 }, log = { 0.3, 0.5, 0.75, 0.6 },
-    gold = { 1, 0.78, 0.2, 1 },
+    -- the blue of Blizzard's own XP bar (its fill averages to this), rested the same blue translucent
+    bg = { 0, 0, 0, 0.55 }, fill = { 0.1, 0.27, 0.76, 1 }, rested = { 0.1, 0.27, 0.76, 0.42 },
+    log = { 0.6, 0.7, 0.85, 0.25 }, gold = { 0.9, 0.72, 0.25, 1 },
 }
 
 local function crop(tex, key, a, b)
@@ -285,7 +286,8 @@ function XP:Create(parent)
         end
         t:SetSize(resolved.pip and 10 or 2, 14)
     end
-    f.pipQ:SetVertexColor(GOLD[1], GOLD[2], GOLD[3])
+    f.pipQ:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], modern and 0.9 or 1)
+    f.pipR:SetVertexColor(modern and 0.6 or 1, modern and 0.78 or 1, 1, modern and 0.7 or 1)
 
     -- enough XP for the level: the preview pulses (each look has its own animation)
     f.pulses = {}
@@ -302,6 +304,42 @@ function XP:Create(parent)
 
     f:SetScript("OnEnter", function() XP:ShowTooltip() end)
     f:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- status text ("12.428 / 23.100 · 53,8 % · 1:24 h to level"), on the bar or below it. Below, it sits on a soft
+    -- dark plate that fades out at both ends, so it stays readable over any background.
+    local st = CreateFrame("Frame", nil, f)
+    st:SetFrameLevel(f:GetFrameLevel() + 8)
+    st:SetSize(10, 16)
+    st.text = st:CreateFontString(nil, "OVERLAY")
+    st.text:SetPoint("CENTER")
+    st.text:SetShadowOffset(1, -1)
+    st.text:SetShadowColor(0, 0, 0, 1)
+    st.plate = {}
+    for i = 1, 3 do
+        local t = st:CreateTexture(nil, "BACKGROUND")
+        t:SetColorTexture(1, 1, 1, 1)
+        st.plate[i] = t
+    end
+    st.plate[2]:SetPoint("TOPLEFT", st.text, "TOPLEFT", -4, 3)
+    st.plate[2]:SetPoint("BOTTOMRIGHT", st.text, "BOTTOMRIGHT", 4, -3)
+    st.plate[2]:SetVertexColor(0, 0, 0, 0.6)
+    st.plate[1]:SetPoint("TOPRIGHT", st.plate[2], "TOPLEFT")
+    st.plate[1]:SetPoint("BOTTOMRIGHT", st.plate[2], "BOTTOMLEFT")
+    st.plate[1]:SetWidth(24)
+    st.plate[3]:SetPoint("TOPLEFT", st.plate[2], "TOPRIGHT")
+    st.plate[3]:SetPoint("BOTTOMLEFT", st.plate[2], "BOTTOMRIGHT")
+    st.plate[3]:SetWidth(24)
+    if st.plate[1].SetGradient and CreateColor then
+        st.plate[1]:SetGradient("HORIZONTAL", CreateColor(0, 0, 0, 0), CreateColor(0, 0, 0, 0.6))
+        st.plate[3]:SetGradient("HORIZONTAL", CreateColor(0, 0, 0, 0.6), CreateColor(0, 0, 0, 0))
+    else
+        st.plate[1]:SetVertexColor(0, 0, 0, 0.3)
+        st.plate[3]:SetVertexColor(0, 0, 0, 0.3)
+    end
+    st:Hide()
+    f.status = st
+    -- the time to the next level changes without XP gains
+    C_Timer.NewTicker(15, function() if ns.db.panel.xpText then ns.Debug.Call("XP:Status", XP.UpdateStatus, XP) end end)
 
     trackXP()
     ns.On("PLAYER_XP_UPDATE", function()
@@ -349,9 +387,9 @@ function XP:ApplySkin(modern)
             t:SetTexCoord(resolved.pip.leftTexCoord, resolved.pip.rightTexCoord, resolved.pip.topTexCoord, resolved.pip.bottomTexCoord)
             t:SetSize(10, 14)
         else
-            t:SetColorTexture(1, 1, 1, 0.85)
+            t:SetColorTexture(1, 1, 1, 1)
             t:SetTexCoord(0, 1, 0, 1)
-            t:SetSize(1, modern and 12 or 14)
+            t:SetSize(modern and 2 or 1, modern and math.max(2, (self.h or 10) - 2) or 14)
         end
     end
     f.pipQ:SetVertexColor(GOLD[1], GOLD[2], GOLD[3])
@@ -369,9 +407,17 @@ function XP:SetGeometry(x, y, w, h)
         if i <= n then
             t:ClearAllPoints()
             t:SetPoint("RIGHT", f, "LEFT", math.floor(w * i * step / 100 + 0.5), 0)
-            t:SetSize(1, h - 3)
+            if self.modern then
+                -- inside the bar, clear of its border
+                t:SetColorTexture(0, 0, 0, 0.3)
+                t:SetSize(1, math.max(2, h - 4))
+                t.light:Hide()
+            else
+                t:SetColorTexture(0, 0, 0, 0.85)
+                t:SetSize(1, h - 3)
+                t.light:Show()
+            end
             t:Show()
-            t.light:Show()
         else
             t:Hide()
             t.light:Hide()
@@ -423,6 +469,50 @@ end
 
 function XP:Update()
     ns.Debug.Call("XP:Update", self.UpdateBar, self)
+    ns.Debug.Call("XP:Status", self.UpdateStatus, self)
+end
+
+-- "1.234,5" in languages that write a decimal comma
+local function decimal(v)
+    local s = fmt("%.1f", v)
+    if ns.language ~= "enUS" and ns.language ~= "zhCN" then s = s:gsub("%.", ",") end
+    return s
+end
+
+function XP:UpdateStatus()
+    local f = self.frame
+    local st = f and f.status
+    if not st then return end
+    local p = ns.db.panel
+    local _, cur, mx, maxed = self:Targets()
+    if not p.xpText or not p.xpbar or maxed or not f:IsShown() then st:Hide() return end
+    local parts = {}
+    if p.xpTextValues then parts[#parts + 1] = num(cur) .. " / " .. num(mx) end
+    if p.xpTextPercent then parts[#parts + 1] = decimal(cur / mx * 100) .. " %" end
+    if p.xpTextRested then
+        local rest = GetXPExhaustion and GetXPExhaustion() or 0
+        if rest and rest > 0 then parts[#parts + 1] = "|cff7fb2ff" .. L().XPTEXT_RESTED:format(num(rest)) .. "|r" end
+    end
+    if p.xpTextTime then
+        local t = XP.TimeToLevel()
+        if t then parts[#parts + 1] = L().XPTEXT_TIME:format(XP.Duration(t, true)) end
+    end
+    if #parts == 0 then st:Hide() return end
+    local below = p.xpTextPos == "below"
+    st.text:SetFont(ns.FontFile(), p.xpTextSize or (below and 11 or 10), "OUTLINE")
+    local gap = string.rep(" ", p.xpTextGap or 2)
+    st.text:SetText(table.concat(parts, gap .. "|cffa0a0a0·|r" .. gap))
+    st:ClearAllPoints()
+    if below then
+        -- away from the screen edge: below the bar at the top, above it at the bottom
+        if p.position == "bottom" then st:SetPoint("BOTTOM", f, "TOP", 0, 6) else st:SetPoint("TOP", f, "BOTTOM", 0, -6) end
+    else
+        -- the classic fill has an empty row at its bottom edge, so its visible middle sits half a unit higher than the
+        -- frame's; the flat modern bar fills the frame exactly
+        st:SetPoint("CENTER", f, "CENTER", 0, XP.modern and 0 or -1)
+    end
+    for _, t in ipairs(st.plate) do t:SetShown(below) end
+    st:Show()
 end
 
 -- Target values of the bar; the fill glides there (XP.shown) when animations are on.
@@ -475,7 +565,10 @@ function XP:Draw()
     local pr, pq, pl = min(1, p + rest / mx), min(1, p + q / mx), min(1, p + all / mx)
 
     segment(f, f.fill, "fill", 0, p)
-    segment(f, f.rested, "rested", p, pr)
+    -- flat look: translucent blue and gold would mix to olive, so the rested part starts where the quest preview ends
+    local q0 = (maxed or not panel.questPreview) and 0 or (XP.cachedQuestXP or 0)
+    local restFrom = XP.modern and math.max(p, math.min(1, p + q0 / mx)) or p
+    segment(f, f.rested, "rested", restFrom, math.max(restFrom, pr))
     segment(f, f.log, "log", p, pl)
     -- finished quests in the chosen look
     local style = panel.questStyle
@@ -503,13 +596,18 @@ function XP:Draw()
         if style == "veil" or style == nil then
             active = f.veil
             f.veil:ClearAllPoints(); f.veil:SetPoint("TOPLEFT", f, "TOPLEFT", x0, 0); f.veil:SetSize(qws, h); f.veil:Show()
-            f.veil:SetGradient("VERTICAL", CreateColor(GOLD[1], GOLD[2], GOLD[3], 0.05 * k),
-                CreateColor(GOLD[1], GOLD[2], GOLD[3], 0.55 * k))
+            if XP.modern then
+                f.veil:SetGradient("VERTICAL", CreateColor(GOLD[1], GOLD[2], GOLD[3], 0.4 * k),
+                    CreateColor(GOLD[1], GOLD[2], GOLD[3], 0.4 * k))
+            else
+                f.veil:SetGradient("VERTICAL", CreateColor(GOLD[1], GOLD[2], GOLD[3], 0.05 * k),
+                    CreateColor(GOLD[1], GOLD[2], GOLD[3], 0.55 * k))
+            end
             f.veilTop:ClearAllPoints()
             f.veilTop:SetPoint("TOPLEFT", f, "TOPLEFT", x0, -1)
             f.veilTop:SetSize(qws, 1)
             f.veilTop:SetAlpha(k)
-            f.veilTop:Show()
+            f.veilTop:SetShown(not XP.modern)
             cap(0.55 * k, 0.05 * k)
         elseif style == "frame" then
             active = f.frameFill

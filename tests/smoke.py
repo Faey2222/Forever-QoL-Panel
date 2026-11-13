@@ -151,6 +151,45 @@ def main() -> int:
         local w = ns.Warnings:Check()
         assert(#w >= 2, "warnings missing: " .. #w)
         ns.Warnings:Update()
+        -- XP status text, every part, on and below the bar, panel top and bottom
+        local P = ForeverQoLPanelDB.panel
+        P.xpText, P.xpTextTime, P.xpTextRested = true, true, true
+        for _, pos in ipairs({ "on", "below" }) do
+            P.xpTextPos = pos; ns.XP:UpdateStatus(); assert(ns.XP.frame.status:IsShown(), "no XP status text")
+        end
+        P.position = "bottom"; ns.XP:UpdateStatus(); P.position = "top"
+        P.xpTextValues, P.xpTextPercent, P.xpTextTime, P.xpTextRested = false, false, false, false
+        ns.XP:UpdateStatus(); assert(not ns.XP.frame.status:IsShown(), "empty status text shown")
+        P.xpText, P.xpTextValues, P.xpTextPercent = false, true, true; ns.XP:UpdateStatus()
+        -- released copy steps aside while the dev copy is on
+        C_AddOns = C_AddOns or {}
+        C_AddOns.GetAddOnEnableState = function(name) return name == "ForeverQoLPanel_Dev" and 2 or 0 end
+        assert(ns.name == "ForeverQoLPanel_Dev" or ns.DevCopyActive(), "released copy does not step aside")
+        C_AddOns.GetAddOnEnableState = nil
+        -- width test: zone switches long/short and back, widths glide
+        ns.Elements:TestWidths(); MOCK_runTimers()
+        assert(ns.Elements.testText == nil or next(ns.Elements.testText) == nil, "test text left behind")
+        -- hunter: low ammo warns; warlock: shard element; new mail glows
+        local realClass = UnitClass
+        UnitClass = function() return "Hunter", "HUNTER" end
+        ForeverQoLPanelDB.warnings.ammoMin = 900
+        local found = false
+        for _, w in ipairs(ns.Warnings:Check()) do if w[4] == "ammo" then found = true end end
+        assert(found, "no low-ammo warning for a hunter")
+        assert(ns.Elements:Available("ammo") and not ns.Elements:Available("shards"), "class-bound elements")
+        ns.Elements.defs.ammo.text()
+        UnitClass = function() return "Warlock", "WARLOCK" end
+        assert(ns.Elements:Available("shards"), "shards for warlocks")
+        ns.Elements.defs.shards.text(); ns.Elements.defs.shards.tip(GameTooltip)
+        for _, w in ipairs(ns.Warnings:Check()) do assert(w[4] ~= "ammo", "ammo warning for a warlock") end
+        UnitClass = realClass; ForeverQoLPanelDB.warnings.ammoMin = 200
+        HasNewMail = function() return true end
+        GetLatestThreeSenders = function() return "Bob", "Alice" end
+        ns.Elements:UpdateTexts(); ns.Elements.defs.mail.tip(GameTooltip)
+        assert(ns.Elements.cells.mail.pulsing, "new mail does not glow")
+        HasNewMail = function() return false end; ns.Elements:UpdateTexts()
+        IsResting = function() return true end; ForeverQoLPanelDB.warnings.hideResting = true; ns.Warnings:Update()
+        ForeverQoLPanelDB.warnings.hideResting = false
         -- quests enough for the level: the preview runs into the bar's round end
         local q0 = ns.XP.cachedQuestXP; ns.XP.cachedQuestXP = 20000
         for _, st in ipairs({ "veil", "frame", "line", "stripes", "glow" }) do ForeverQoLPanelDB.panel.questStyle = st; ns.XP:Draw() end
@@ -240,7 +279,7 @@ def main() -> int:
         for _ = 1, 12 do ns.Wizard:Go(1) end
         assert(ForeverQoLPanelDB.wizard == ns.VERSION, "wizard not finished")
         ForeverQoLPanelDB.wizard = "0.1.0"; ns.Wizard:Open(false)
-        assert(#ns.Wizard.pages == 7, "update pages: " .. #ns.Wizard.pages)
+        assert(#ns.Wizard.pages == 10, "update pages: " .. #ns.Wizard.pages)
         for i = 1, 8 do ns.Wizard:Jump(i) end
         ns.Wizard.frame.tiles[1]:GetScript("OnClick")(ns.Wizard.frame.tiles[1])
         ns.Wizard:Finish()

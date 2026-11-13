@@ -2,7 +2,7 @@ local ADDON, ns = ...
 
 ns.name = ADDON
 ns.title = "Forever QoL Panel"
-ns.VERSION = "1.0.0"   -- the setup wizard shows the pages of features newer than the last version seen
+ns.VERSION = "1.1.0"   -- the setup wizard shows the pages of features newer than the last version seen
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\media\\"
 
 function ns.Tex(name)
@@ -61,6 +61,9 @@ ns.defaults = {
         animations = true,
         logPreview = false,      -- XP of every quest in the log (pale blue)
         questPreview = true,     -- XP of finished quests (gold)
+        xpText = false,          -- status text on or below the XP bar, with the parts below
+        xpTextValues = true, xpTextPercent = true, xpTextTime = false, xpTextRested = false, xpTextPos = "on",
+        xpTextSize = 10, xpTextGap = 2,     -- font size and the spaces around the dots between the parts
         questStyle = "veil",     -- veil, frame, line, glow, shimmer, stripes
         readyPulse = false,      -- the preview pulses when it is enough for the next level
         pad = 9,                 -- left/right padding of every element
@@ -70,10 +73,10 @@ ns.defaults = {
         pinned = false,
         hideBlizzardXP = true,
         collectButtons = true,   -- minimap buttons of other addons go into the panel's addon menu
-        order = { "hearth", "gold", "session", "bags", "materials", "ammo", "durability", "honor", "pvp", "favor", "zone",
+        order = { "hearth", "gold", "session", "bags", "mail", "materials", "ammo", "shards", "durability", "honor", "pvp", "favor", "zone",
             "coords", "xph", "clock", "stopwatch", "latency", "fps", "addons" },
         items = {
-            hearth = true, gold = true, session = true, bags = true, materials = false, ammo = false, durability = true,
+            hearth = true, gold = true, session = true, bags = true, mail = true, materials = false, ammo = true, shards = true, durability = true,
             honor = false, pvp = false, favor = false, zone = true, coords = false, xph = true, clock = true, stopwatch = false,
             latency = true, fps = false, addons = true,
         },
@@ -93,7 +96,7 @@ ns.defaults = {
     warnings = { enabled = true, classBuffs = true, food = true, weapon = true, expiring = true, sound = false,
         combat = false, scale = 1, foodWhere = "instance", flask = true, flaskWhere = "raid",
         iconShape = "panel", anim = "pulse", animRepeat = "once",
-        hideWithWindows = true },   -- pos / link: placement of the two groups
+        hideWithWindows = true, ammo = true, ammoMin = 200, hideResting = false },   -- pos / link: placement of the two groups
     tooltip = { enabled = true, sellValue = true, counts = true, gather = true },
     items = {},     -- [realm]["Faction:Name"] = { class, bags = { [itemID] = count }, bank = { ... } }
     session = {},   -- [name-realm] = gold and XP of the running session, kept over /reload
@@ -264,7 +267,26 @@ ns.On("ADDON_LOADED", function(_, name)
     ns.SetLanguage(db.language)
 end)
 
+-- The released copy steps aside while the development copy (ForeverQoLPanel_Dev) is switched on for this
+-- character, so the panel never shows twice. It loads first (alphabetical) and simply starts nothing.
+local DEV_COPY = "ForeverQoLPanel_Dev"
+local function devCopyActive()
+    if ADDON == DEV_COPY then return false end
+    local state
+    if C_AddOns and C_AddOns.GetAddOnEnableState then
+        local ok, value = pcall(C_AddOns.GetAddOnEnableState, DEV_COPY, UnitName("player"))
+        if ok then state = value end
+    end
+    if state == nil and GetAddOnEnableState then
+        local ok, value = pcall(GetAddOnEnableState, UnitName("player"), DEV_COPY)
+        if ok then state = value end
+    end
+    return type(state) == "number" and state > 0
+end
+ns.DevCopyActive = devCopyActive
+
 ns.On("PLAYER_LOGIN", function()
+    if devCopyActive() then ns.stepAside = true return end
     for _, fn in ipairs(loginHooks) do
         local ok, err = pcall(fn)
         if not ok then geterrorhandler()(err) end

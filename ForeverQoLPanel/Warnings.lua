@@ -226,6 +226,16 @@ function W:Check()
             out[#out + 1] = { GetInventoryItemTexture("player", 16), L.WARN_WEAPON, "cons", "weapon" }
         end
     end
+    -- ammo: hunters only (the only class that shoots it)
+    local _, myClass = UnitClass("player")
+    if db().ammo and myClass == "HUNTER" and ns.Elements and ns.Elements.AmmoCount then
+        local n, link = ns.Elements.AmmoCount()
+        if (n or 0) < (db().ammoMin or 200) and (n ~= nil or not link) then
+            local tex = link and ns.ItemIcon(link) or "Interface\\Icons\\INV_Ammo_Arrow_02"
+            local text = (n or 0) == 0 and L.WARN_AMMO_NONE or L.WARN_AMMO:format(n)
+            out[#out + 1] = { tex, text, "cons", "ammo" }
+        end
+    end
     if db().expiring then
         local now = GetTime()
         for n, a in pairs(list) do
@@ -607,6 +617,7 @@ function W:Update()
     local quiet = not d.enabled or (InCombatLockdown() and not d.combat) or UnitIsDeadOrGhost("player")
         or UnitOnTaxi("player") or (IsMounted and IsMounted() and not InCombatLockdown())
         or (d.hideWithWindows and windowOpen())
+        or (d.hideResting and IsResting and IsResting())
     self:Show(quiet and {} or self:Check())
 end
 
@@ -632,6 +643,8 @@ ns.OnLogin(function()
         ns.Debug.Call("Warnings", W.Update, W)
     end)
     ns.On("PLAYER_REGEN_ENABLED", function() W:Unlock(); ns.Debug.Call("Warnings", W.Update, W) end)
+    ns.On("PLAYER_UPDATE_RESTING", function() ns.Debug.Call("Warnings", W.Update, W) end)
+    ns.On("BAG_UPDATE_DELAYED", function() ns.Debug.Call("Warnings", W.Update, W) end)
     ns.On("UNIT_AURA", function(_, unit, info)
         if unit ~= "player" then return end
         if W.locked then

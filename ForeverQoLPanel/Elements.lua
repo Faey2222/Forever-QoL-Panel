@@ -235,10 +235,30 @@ local function ammoSlot()
     return 0
 end
 
+-- the equipped ammo: count of that ammo in the bags (the client counts all stacks), its link
+local function ammoCount()
+    local slot = ammoSlot()
+    local link = GetInventoryItemLink and GetInventoryItemLink("player", slot)
+    if not link then return nil end
+    local ok, n = pcall(GetInventoryItemCount, "player", slot)
+    if not ok or ns.Secret(n) then return nil, link end
+    return n or 0, link
+end
+E.AmmoCount = ammoCount
+
 def("ammo", {
+    class = "HUNTER",
     icon = "Interface\\Icons\\INV_Ammo_Arrow_02",
     flash = true,
-    text = function() return slotText("ammo") end,
+    text = function()
+        -- the ammo you carry first, the free slots of the ammo pouch after it in grey
+        local n = ammoCount()
+        local _, total = slots("ammo")
+        local count = n and num(n) or "|cffa0a0a0-|r"
+        if n and n < (ns.db.warnings.ammoMin or 200) then count = "|cffff3030" .. count .. "|r" end
+        if total == 0 then return count end
+        return count .. "  |cffa0a0a0" .. slotText("ammo"):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "") .. "|r"
+    end,
     tip = function(tt)
         slotTip(tt, "ammo", L.ITEM_ammo, L.NO_AMMO_BAG)
         local slot = ammoSlot()
@@ -250,6 +270,67 @@ def("ammo", {
         hint(tt, L.CLICK_BAGS)
     end,
     click = openBags,
+})
+
+-- Soul shards (warlocks) ----------------------------------------------------------------
+
+local SOUL_SHARD = 6265
+
+def("shards", {
+    class = "WARLOCK",
+    icon = "Interface\\Icons\\INV_Misc_Gem_Amethyst_02",
+    flash = true,
+    text = function()
+        local n = ns.ItemCount(SOUL_SHARD)
+        if n == 0 then return "|cffff3030" .. n .. "|r" end
+        return tostring(n)
+    end,
+    tip = function(tt)
+        header(tt, L.ITEM_shards)
+        line(tt, L.SHARDS_CARRIED, num(ns.ItemCount(SOUL_SHARD)))
+        hint(tt, L.CLICK_BAGS)
+    end,
+    click = openBags,
+})
+
+-- Mail -------------------------------------------------------------------------------
+-- New mail glows in the panel until it is read: a gentle pulse, or a steady glow with fewer animations.
+
+local function mailSenders()
+    local list = {}
+    if GetLatestThreeSenders then
+        for _, name in ipairs({ GetLatestThreeSenders() }) do
+            if name and not ns.Secret(name) and name ~= "" then list[#list + 1] = name end
+        end
+    end
+    return list
+end
+
+def("mail", {
+    icon = "Interface\\Icons\\INV_Letter_15",
+    minWidth = 40,
+    text = function()
+        if not (HasNewMail and HasNewMail()) then return "|cffa0a0a0" .. L.MAIL_NONE .. "|r" end
+        local s = mailSenders()
+        if #s == 1 then return "|cffffd100" .. s[1] .. "|r" end
+        if #s > 1 then return "|cffffd100" .. L.MAIL_FROM_N:format(#s) .. "|r" end
+        return "|cffffd100" .. L.MAIL_NEW .. "|r"
+    end,
+    pulse = function() return HasNewMail and HasNewMail() and true or false end,
+    tip = function(tt)
+        header(tt, L.ITEM_mail)
+        if HasNewMail and HasNewMail() then
+            local s = mailSenders()
+            if #s > 0 then
+                tt:AddLine(L.MAIL_FROM, 1, 0.82, 0)
+                for _, name in ipairs(s) do tt:AddLine("  " .. name, 1, 1, 1) end
+            else
+                tt:AddLine(L.MAIL_NEW, 1, 0.82, 0)
+            end
+        else
+            tt:AddLine(L.MAIL_NONE, 0.62, 0.62, 0.62)
+        end
+    end,
 })
 
 -- Durability ----------------------------------------------------------------------
@@ -585,6 +666,7 @@ local function showTip(cell)
     if E.dragging or not d.tip then return end
     GameTooltip:SetOwner(cell, ns.TipPoint())
     d.tip(GameTooltip)
+    GameTooltip:AddLine(L.DRAG_HINT, 0.5, 0.5, 0.5)
     GameTooltip:AddLine(L.RIGHT_CLICK_MENU, 0.5, 0.5, 0.5)
     GameTooltip:Show()
 end
@@ -599,6 +681,36 @@ local function hover(c, on)
 end
 
 E.ShowTip = showTip
+
+-- a cell that asks for attention (new mail): pulsing glow, steady glow with fewer animations
+local function pulse(c, on)
+    if not c.pulseGlow then
+        c.pulseGlow = c:CreateTexture(nil, "BACKGROUND", nil, 2)
+        c.pulseGlow:SetPoint("TOPLEFT", 0, -3)
+        c.pulseGlow:SetPoint("BOTTOMRIGHT", 0, 3)
+        c.pulseGlow:SetColorTexture(1, 0.82, 0.3, 1)
+        c.pulseGlow:SetBlendMode("ADD")
+        c.pulseGlow:SetAlpha(0)
+    end
+    if not on then
+        c:SetScript("OnUpdate", nil)
+        c.pulseGlow:SetAlpha(0)
+        c.pulsing = false
+        return
+    end
+    if c.pulsing then return end
+    c.pulsing = true
+    if ns.Motion() ~= "full" then
+        c.pulseGlow:SetAlpha(0.35)
+        return
+    end
+    local t = 0
+    c:SetScript("OnUpdate", function(self, elapsed)
+        t = t + elapsed
+        local wave = 0.5 - 0.5 * math.cos(2 * math.pi * t / 1.6)
+        self.pulseGlow:SetAlpha(0.1 + 0.5 * wave)
+    end)
+end
 
 local function flash(c)
     tween(c.glow, 0.35, 0, 0.9, function(v) c.glow:SetAlpha(v) end)
@@ -686,9 +798,17 @@ function E:Build(parent)
         c.icon = c:CreateTexture(nil, "ARTWORK")
         c.icon:SetSize(ICON, ICON)
         c.ring = c:CreateTexture(nil, "OVERLAY")
-        c.text = c:CreateFontString(nil, "ARTWORK")
+        -- the text sits in a clipping frame: a text longer than its room is cut off and fades out, never wraps
+        c.clip = CreateFrame("Frame", nil, c)
+        c.clip:SetClipsChildren(true)
+        -- clipping applies to child frames, so the text lives on a frame inside the clipping one
+        local holder = CreateFrame("Frame", nil, c.clip)
+        holder:SetAllPoints(c.clip)
+        c.text = holder:CreateFontString(nil, "ARTWORK")
         c.text:SetFontObject(font)
         c.text:SetJustifyH("LEFT")
+        c.text:SetWordWrap(false)
+        if c.text.SetNonSpaceWrap then c.text:SetNonSpaceWrap(false) end
         -- separator to the left of the cell
         c.sepTop = parent:CreateTexture(nil, "ARTWORK")
         c.sepBot = parent:CreateTexture(nil, "ARTWORK")
@@ -742,6 +862,9 @@ function E:Build(parent)
     self.marker:SetSize(2, BH - 8)
     self.marker:Hide()
 
+    for _, ev in ipairs({ "UPDATE_PENDING_MAIL", "MAIL_INBOX_UPDATE", "MAIL_CLOSED" }) do
+        ns.On(ev, function() E:UpdateTexts(); ns.Dock:Relayout() end)
+    end
     for _, ev in ipairs({ "BAG_UPDATE_DELAYED", "UPDATE_INVENTORY_DURABILITY", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS",
         "PLAYER_XP_UPDATE", "CURRENCY_DISPLAY_UPDATE", "UNIT_INVENTORY_CHANGED", "PLAYER_FLAGS_CHANGED", "UNIT_FACTION" }) do
         ns.On(ev, function() E:UpdateTexts(); ns.Dock:Relayout() end)
@@ -818,20 +941,98 @@ function E:ResetWidths()
     for _, c in pairs(self.cells) do c.steady = nil end
 end
 
+-- A cell's width follows its text both ways, gliding to the new width (the panel follows along); a growing text
+-- fades in as its room opens. Digits count as "0", so ticking numbers never change a width.
+local WIDTH_STEP, WIDTH_TIME = 4, 0.35
+local function glideWidth(c, text)
+    local target = math.ceil(steadyWidth(text) / WIDTH_STEP) * WIDTH_STEP
+    if c.steady == nil then c.steady, c.target = target, target return end
+    if target == c.target then return end
+    c.target = target
+    local from = c.steady
+    c.widthId = c.widthId or {}
+    tween(c.widthId, from, target, WIDTH_TIME, function(v)
+        c.steady = v
+        if ns.Dock then ns.Dock:Relayout() end
+    end)
+end
+
+-- Test from the options: the zone element (or the first shown one) switches between a long and a short text.
+function E:TestWidths()
+    local key = self:Shown("zone") and "zone" or nil
+    if not key then
+        for _, k in ipairs(ns.db.panel.order) do if self:Shown(k) then key = k break end end
+    end
+    if not key then return end
+    self.testText = self.testText or {}
+    local steps = { L.TEST_WIDTH_LONG, L.TEST_WIDTH_SHORT, L.TEST_WIDTH_LONG, false }
+    for i, text in ipairs(steps) do
+        C_Timer.After((i - 1) * 1.4, function()
+            self.testText[key] = text or nil
+            self:UpdateTexts()
+            ns.Dock:Relayout()
+        end)
+    end
+end
+
+-- shown: switched on, and for class-bound elements (ammo, soul shards) the right class
+function E:Available(key)
+    local d = self.defs[key]
+    if not d then return false end
+    if d.class then
+        local _, class = UnitClass("player")
+        if class ~= d.class then return false end
+    end
+    return true
+end
+
+function E:Shown(key)
+    return ns.db.panel.items[key] and self:Available(key) or false
+end
+
 function E:UpdateTexts()
     for key, c in pairs(self.cells) do
         local d = self.defs[key]
-        if ns.db.panel.items[key] then
+        if self:Shown(key) then
             local ok, text = pcall(d.text)
             text = ok and text or "?"
+            if self.testText and self.testText[key] then text = self.testText[key] end
             if c.last and c.last ~= text and d.flash then flash(c) end
             c.last = text
             c.text:SetText(text)
-            -- the width only grows (until the zone changes), so the panel does not twitch
-            -- rounded up to steps of 8, so small changes need no new layout at all
-            c.steady = math.max(c.steady or 0, math.ceil(steadyWidth(text) / 8) * 8)
+            if d.pulse then
+                local okP, on = pcall(d.pulse)
+                pulse(c, okP and on)
+            end
+            glideWidth(c, text)
         end
         if GameTooltip:IsOwned(c) then showTip(c) end
+    end
+end
+
+-- A text in its clipping frame: centred or left-aligned when it fits; otherwise left-aligned, cut off by the frame
+-- and fading out over its last visible letters.
+local function visibleLength(text)
+    local plain = (text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "#"):gsub("|A.-|a", "#")
+    return #plain:gsub("[\128-\191]", "")
+end
+
+function E.FitText(fs, room, center)
+    fs:ClearAllPoints()
+    local full = (fs.GetUnboundedStringWidth and fs:GetUnboundedStringWidth()) or fs:GetStringWidth() or 0
+    local fits = full <= room + 1
+    if fits and center then
+        fs:SetPoint("CENTER", fs:GetParent(), "CENTER", 0, 0)
+    else
+        fs:SetPoint("LEFT", fs:GetParent(), "LEFT", 0, 0)
+    end
+    if not fs.SetAlphaGradient then return end
+    local n = visibleLength(fs:GetText())
+    if fits or full <= 0 then
+        fs:SetAlphaGradient(n + 10, 1)   -- past the end: no fade
+    else
+        local shown = math.floor(n * room / full)
+        fs:SetAlphaGradient(math.max(0, shown - 3), 3)
     end
 end
 
@@ -841,7 +1042,7 @@ function E:Layout()
     local pad, x, first = p.pad, side(), true
     for _, key in ipairs(p.order) do
         local c, d = self.cells[key], self.defs[key]
-        if c and p.items[key] then
+        if c and self:Shown(key) then
             local tw = ceil(math.max(c.steady or c.text:GetStringWidth(), d.minWidth or 0))
             local w = pad * 2 + ICON + GAP + tw
             c:ClearAllPoints()
@@ -849,13 +1050,10 @@ function E:Layout()
             c:SetWidth(w)
             c.icon:ClearAllPoints()
             c.icon:SetPoint("CENTER", c, "LEFT", pad + ICON / 2, 0)
-            c.text:ClearAllPoints()
-            c.text:SetPoint("LEFT", c, "LEFT", pad + ICON + GAP, 0)
-            if d.center then
-                -- centred in the space the steady width keeps free
-                c.text:SetPoint("RIGHT", c, "RIGHT", -pad, 0)
-                c.text:SetJustifyH("CENTER")
-            end
+            c.clip:ClearAllPoints()
+            c.clip:SetPoint("LEFT", c, "LEFT", pad + ICON + GAP, 0)
+            c.clip:SetSize(tw + 1, BH)
+            E.FitText(c.text, tw, d.center)
             c:Show()
             c.x = x
             self:PlaceSeparator(c, x, first)
@@ -887,6 +1085,32 @@ function E:PlaceSeparator(c, x, first)
     end
 end
 
+-- Elements by theme, for the options and the right-click menu. Elements not listed land in the last group.
+E.GROUPS = {
+    { "EL_GROUP_MONEY", { "gold", "session", "bags", "materials", "ammo", "shards" } },
+    { "EL_GROUP_PROGRESS", { "xph", "durability", "honor", "pvp", "favor" } },
+    { "EL_GROUP_WORLD", { "hearth", "zone", "coords", "clock", "stopwatch" } },
+    { "EL_GROUP_SYSTEM", { "mail", "latency", "fps", "addons" } },
+}
+
+-- { { title, { keys available to this character } }, ... }
+function E:Grouped()
+    local placed, out = {}, {}
+    for _, g in ipairs(self.GROUPS) do
+        local keys = {}
+        for _, key in ipairs(g[2]) do
+            placed[key] = true
+            if self:Available(key) then keys[#keys + 1] = key end
+        end
+        out[#out + 1] = { L[g[1]], keys }
+    end
+    local last = out[#out][2]
+    for _, key in ipairs(ns.defaults.panel.order) do
+        if not placed[key] and self:Available(key) then last[#last + 1] = key end
+    end
+    return out
+end
+
 -- Right-click menu: which elements are shown, pin, options ---------------------------
 
 function E:ShowMenu(owner)
@@ -894,13 +1118,17 @@ function E:ShowMenu(owner)
     local p = ns.db.panel
     MenuUtil.CreateContextMenu(owner, function(_, root)
         root:CreateTitle(ns.title)
-        for _, key in ipairs(p.order) do
-            if self.defs[key] then
-                root:CreateCheckbox(L["ITEM_" .. key], function() return p.items[key] end, function()
-                    p.items[key] = not p.items[key]
-                    E:UpdateTexts()
-                    ns.Refresh()
-                end)
+        -- elements by theme, each theme a submenu
+        for _, g in ipairs(self:Grouped()) do
+            if #g[2] > 0 then
+                local sub = root:CreateButton(g[1])
+                for _, key in ipairs(g[2]) do
+                    sub:CreateCheckbox(L["ITEM_" .. key], function() return p.items[key] end, function()
+                        p.items[key] = not p.items[key]
+                        E:UpdateTexts()
+                        ns.Refresh()
+                    end)
+                end
             end
         end
         root:CreateDivider()

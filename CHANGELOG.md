@@ -1,44 +1,27 @@
-### Forever QoL Panel 1.0.0 – First release
+### Forever QoL Panel 1.1.0 – Mail, ammo and a status text for the XP bar
 
-The first release of Forever QoL Panel: the quality-of-life features you would otherwise collect from a handful of addons, in one package for WoW Forever, designed to look like part of the base game. Every feature can be switched off on its own, and a short setup wizard walks you through the most useful settings on your first login.
+Thank you for the first feedback! This update brings new panel elements, a status text for the XP bar, a calmer modern look and a panel that adapts smoothly to its contents. The setup wizard shows you what is new on your next login.
 
-#### Info panel
-- **Panel with built-in XP bar** at the top or bottom of the screen; it folds up after a few seconds or stays pinned
-- **XP bar:** rested XP, tick marks every 5, 10, 20 or 25 %, and a preview of the XP your finished quests will give, glowing once it is enough for the next level
-- **Elements to choose from**, arranged by drag and drop: gold, session gold and XP, XP per hour, bag space, materials, ammo, durability, hearthstone (click to use), zone, coordinates, clock, stopwatch, latency, FPS, honor, PvP timer and more
-- **Two looks:** Forever's classic bronze frame or a modern flat style; border colour, width, corners, separators and icon borders to taste
+#### New panel elements
+- **Mailbox:** shows whether mail has arrived and who sent it; new mail glows gently in the panel until it is read
+- **Ammo (hunters):** how much ammo you carry, plus the free slots of your quiver or ammo pouch
+- **Soul shards (warlocks):** how many soul shards you carry
 
-#### Minimap
-- Collects the minimap buttons of other addons into one tidy menu, on the panel or on a floating button
+#### XP bar
+- **Status text:** XP of XP, percent, time to the next level and rested XP – each part on its own, on the bar or below it, with adjustable font size and spacing
+- **Modern look:** round corners again, the blue of Blizzard's own XP bar, tick marks inside the bar, and rested XP no longer mixes with the quest preview
 
-#### Action bars
-- Newly learned spells are placed on your bars automatically, the main bar first
-- Higher ranks replace lower ones on every bar, also at the push of a button
+#### Panel
+- Elements glide to their new width when their text gets longer or shorter, and the panel follows smoothly; a text that does not fit is cut off with a soft fade instead of wrapping
+- The tooltip of every element tells you that it can be dragged to another place
+- Elements are sorted by theme in the options and in the right-click menu: money and bags, character and progress, place and time, mail and system
 
-#### Quests and gameplay
-- Accepts and turns in quests automatically; hold Shift to pause
-- Marks the most valuable quest reward and shows the sell value of every choice
-- Skips dialogues with a single option, sells grey items and repairs, guild funds first
-- Faster auto loot and loot shown as floating text, movable and scalable
+#### Warnings
+- **Low ammo (hunters):** a warning when you carry less ammo than you set, adjustable from 100 to 800
+- **Quiet in cities and inns:** optionally no warnings while you are resting
 
-#### Quest markers
-- Units your quests still need get a kill or loot icon on their nameplate, optionally with the progress
-- Five positions, size and fine offset adjustable
-
-#### Buff and consumable warnings
-- Missing class buffs, food buff, flask or elixir, weapon buffs and buffs about to run out
-- Choose where they apply: everywhere, in dungeons and raids, or in raids only
-- Charge shields such as Lightning Shield are followed in combat
-- Two movable groups that snap together, adjustable size and icon shape, optional animations (pulse, bounce, flash, wave) and sound
-
-#### Tooltips
-- Sell value, including whole stacks
-- How many of an item each of your characters owns, in bags and bank
-- Required gathering skill on herbs, mining nodes and skinnable creatures, coloured by your own skill
-
-#### Options
-- Own options window with search: open it with /fqp, the minimap button or a right-click on the panel
-- Setup wizard on first login and after updates, again any time with /fqp setup
-- English, German, French, Spanish, Russian and Simplified Chinese
+#### Fixes
+- Buttons and the search hint in the options now follow the addon's language instead of the game's
+- Elements of other classes no longer appear in the options and menus
 
 Ideas, wishes or bugs? Let us know on CurseForge or GitHub.

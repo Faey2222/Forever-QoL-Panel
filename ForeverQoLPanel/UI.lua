@@ -32,6 +32,9 @@ UI.NEED = {
     xph = { function() return ns.db.panel.items.xph end, "ITEM_xph" },
     clock = { function() return ns.db.panel.items.clock end, "ITEM_clock" },
     food = { function() return ns.db.warnings.food end, "OPT_WARN_FOOD" },
+    xptext = { function() return ns.db.panel.xpText end, "OPT_XPTEXT" },
+    hunter = { function() return select(2, UnitClass("player")) == "HUNTER" end, "NEED_HUNTER" },
+    warlock = { function() return select(2, UnitClass("player")) == "WARLOCK" end, "NEED_WARLOCK" },
     flask = { function() return ns.db.warnings.flask end, "OPT_WARN_FLASK" },
     lootText = { function() return ns.db.gameplay.lootText end, "OPT_GP_LOOTTEXT" },
 }

@@ -270,7 +270,8 @@ function Dock:LayoutModern(W)
     local rail = p.style == "rail"
     W = math.max(W, 200)
     local r = p.corners == "round" and 6 or 0
-    local br = p.corners == "round" and 3 or 0
+    -- the bar's corners as round as the panel's: with the border on top, the bar's square ends disappear under the arcs
+    local br = p.corners == "round" and 6 or 0
     local tint = MBORDER[p.rim] or MBORDER.bronze
     local th = p.border or 2                                -- border thickness: 1, 2 or 3 units
     for _, t in ipairs({ self.fillL, self.fillR, self.fillM, self.capL, self.capR, self.edge,

@@ -11,6 +11,7 @@ local function panel() return ns.db.panel end
 local function ab() return ns.db.actionbar end
 local function gp() return ns.db.gameplay end
 local function wn() return ns.db.warnings end
+local function items() return ns.db.panel.items end
 local function tt() return ns.db.tooltip end
 local function np() return ns.db.nameplates end
 local function mm() return ns.db.minimap end
@@ -69,6 +70,24 @@ local PAGES = {
         { "check", "OPT_TT_SELL", tt, "sellValue" },
         { "check", "OPT_TT_COUNTS", tt, "counts" },
         { "check", "OPT_TT_GATHER", tt, "gather" },
+    } },
+    { id = "xptext", icon = "Interface\\Icons\\Spell_Holy_SurgeOfLight", since = "1.1.0", title = "SEC_XPTEXT", text = "WZ_XPTEXT_TEXT", controls = {
+        { "check", "OPT_XPTEXT", panel, "xpText" },
+        { "check", "OPT_XPTEXT_VALUES", panel, "xpTextValues" },
+        { "check", "OPT_XPTEXT_PERCENT", panel, "xpTextPercent" },
+        { "check", "OPT_XPTEXT_TIME", panel, "xpTextTime" },
+        { "check", "OPT_XPTEXT_RESTED", panel, "xpTextRested" },
+        { "choice", "OPT_XPTEXT_POS", panel, "xpTextPos", { { "on", "XPTEXT_ON" }, { "below", "XPTEXT_BELOW" } } },
+    } },
+    { id = "mail", icon = "Interface\\Icons\\INV_Letter_15", since = "1.1.0", title = "ITEM_mail", text = "WZ_MAIL_TEXT", controls = {
+        { "check", "ITEM_mail", items, "mail" },
+    } },
+    { id = "ammo", icon = "Interface\\Icons\\INV_Ammo_Arrow_02", since = "1.1.0", title = "WZ_AMMO_TITLE", text = "WZ_AMMO_TEXT", controls = {
+        { "check", "ITEM_ammo", items, "ammo", class = "HUNTER" },
+        { "check", "OPT_WARN_AMMO", wn, "ammo", class = "HUNTER" },
+        { "slider", "OPT_WARN_AMMO_MIN", wn, "ammoMin", min = 100, max = 800, step = 50, class = "HUNTER" },
+        { "check", "ITEM_shards", items, "shards", class = "WARLOCK" },
+        { "check", "OPT_WARN_RESTING", wn, "hideResting" },
     } },
 }
 
@@ -151,8 +170,10 @@ end
 -- the page's controls as UI specs
 local function specs(page)
     local list = { { type = "text", label = L[page.text] } }
+    local _, myClass = UnitClass("player")
     for _, c in ipairs(page.controls) do
         local kind, key, tbl, field = c[1], c[2], c[3], c[4]
+        if c.class and c.class ~= myClass then kind = nil end
         local s = {
             label = L[key], tip = tipOf(key), reload = c.reload,
             get = function() return tbl()[field] end,
@@ -160,12 +181,14 @@ local function specs(page)
         }
         if kind == "check" then
             s.type = "check"
-        else
+        elseif kind == "slider" then
+            s.type, s.min, s.max, s.step, s.suffix = "slider", c.min, c.max, c.step, c.suffix
+        elseif kind then
             s.type = "choice"
             s.values = {}
             for _, opt in ipairs(c[5]) do s.values[#s.values + 1] = { opt[1], L[opt[2]] } end
         end
-        list[#list + 1] = s
+        if kind then list[#list + 1] = s end
     end
     return list
 end
