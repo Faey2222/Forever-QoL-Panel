@@ -160,6 +160,15 @@ local function bagInfo(bag)
     elseif GetContainerNumFreeSlots then free, kind = GetContainerNumFreeSlots(bag) end
     local total = (CC and CC.GetContainerNumSlots and CC.GetContainerNumSlots(bag))
         or (GetContainerNumSlots and GetContainerNumSlots(bag)) or 0
+    -- the client reports 0 free for some profession bags even when they are empty: count the empty slots instead
+    local getInfo = CC and CC.GetContainerItemInfo
+    if getInfo and total > 0 then
+        local empty = 0
+        for slot = 1, total do
+            if not getInfo(bag, slot) then empty = empty + 1 end
+        end
+        free = empty
+    end
     return free or 0, total, kind or 0
 end
 

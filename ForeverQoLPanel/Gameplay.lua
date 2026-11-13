@@ -171,38 +171,69 @@ function G:Merchant()
     if on("sellGrey") and not paused() then self:SellGrey() end
 end
 
--- A few items per step: the server drops too many sales at once. The merchant counts as open from MERCHANT_SHOW to
--- MERCHANT_CLOSED (Blizzard shows its frame only after the event, so the frame can't tell yet).
-function G:SellGrey()
-    local list, total, unknown = {}, 0, 0
+-- The grey items in the bags: { bag, slot, id, value } each.
+local function greyItems()
+    local list = {}
     for bag = 0, (NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4) do
         for slot = 1, bagSlots(bag) do
             local info = itemInfo(bag, slot)
-            if info and info.quality == 0 and not info.hasNoValue and not info.isLocked then
-                list[#list + 1] = { bag, slot }
+            if info and info.quality == 0 and not info.hasNoValue then
                 -- the price may not be cached yet; the item is sold all the same
-                local price = sellPrice(info.itemID or info.hyperlink)
-                if price > 0 then total = total + price * (info.stackCount or 1) else unknown = unknown + 1 end
+                local value = sellPrice(info.itemID or info.hyperlink) * (info.stackCount or 1)
+                list[#list + 1] = { bag, slot, info.itemID, value, locked = info.isLocked }
             end
         end
     end
-    ns.Debug.Set("sellGrey", { found = #list, total = total, unknown = unknown })
+    return list
+end
+
+-- The game may refuse an addon selling item by item (the sale then needs a click). So the merchant's own "sell all
+-- junk" is used where the client has it, the old way only as a fallback, and the message counts what really left the
+-- bags: nothing is reported as sold that wasn't. The merchant counts as open from MERCHANT_SHOW to MERCHANT_CLOSED.
+function G:SellGrey()
+    local list = {}
+    for _, s in ipairs(greyItems()) do if not s.locked then list[#list + 1] = s end end
     if #list == 0 then return end
-    local i = 1
-    local function step()
-        if not self.merchantOpen then return end
-        for _ = 1, 8 do
-            local s = list[i]
-            if not s then
-                say(ns.L.GP_SOLD:format(#list, money(total)))
-                return
+    local MF = C_MerchantFrame
+    local how
+    if MF and MF.SellAllJunkItems and pcall(MF.SellAllJunkItems) then
+        how = "junk"
+    else
+        how = "items"
+        self.sellBlocked = false
+        local i = 1
+        local function step()
+            if not self.merchantOpen or self.sellBlocked then return end
+            for _ = 1, 8 do
+                local s = list[i]
+                if not s then return end
+                useItem(s[1], s[2])
+                i = i + 1
             end
-            useItem(s[1], s[2])
-            i = i + 1
+            C_Timer.After(0.25, step)
         end
-        C_Timer.After(0.25, step)
+        step()
     end
-    C_Timer.After(0.2, step)
+    -- count after the server has answered: an item counts as sold when its slot no longer holds it
+    C_Timer.After(1.5 + 0.25 * math.floor(#list / 8), function()
+        local left = {}
+        for _, s in ipairs(greyItems()) do left[s[1] * 1000 + s[2]] = s[3] end
+        local sold, total = 0, 0
+        for _, s in ipairs(list) do
+            if left[s[1] * 1000 + s[2]] ~= s[3] then sold, total = sold + 1, total + s[4] end
+        end
+        ns.Debug.Set("sellGrey", { how = how, found = #list, sold = sold, total = total, blocked = self.sellBlocked })
+        if sold > 0 then
+            say(ns.L.GP_SOLD:format(sold, money(total)))
+        else
+            say(ns.L.GP_SELL_BLOCKED)
+        end
+    end)
+end
+
+-- the game refused one of our calls: stop selling item by item at once
+function G:ActionBlocked(addon)
+    if addon == ns.name then self.sellBlocked = true end
 end
 
 -- Loot -------------------------------------------------------------------------
@@ -420,6 +451,8 @@ ns.OnLogin(function()
     end
     ns.On("MERCHANT_SHOW", function() G.merchantOpen = true; ns.Debug.Call("Merchant", G.Merchant, G) end)
     ns.On("MERCHANT_CLOSED", function() G.merchantOpen = false end)
+    ns.On("ADDON_ACTION_BLOCKED", function(_, addon) G:ActionBlocked(addon) end)
+    ns.On("ADDON_ACTION_FORBIDDEN", function(_, addon) G:ActionBlocked(addon) end)
     ns.On("LOOT_READY", function() G:FastLoot() end)
     ns.On("CHAT_MSG_LOOT", function(_, msg) ns.Debug.Call("Loot", G.LootMessage, G, msg) end)
     ns.On("CHAT_MSG_MONEY", function(_, msg) ns.Debug.Call("Loot", G.MoneyMessage, G, msg) end)
