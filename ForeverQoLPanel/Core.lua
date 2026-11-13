@@ -2,7 +2,7 @@ local ADDON, ns = ...
 
 ns.name = ADDON
 ns.title = "Forever QoL Panel"
-ns.VERSION = "1.1.1"   -- the setup wizard shows the pages of features newer than the last version seen
+ns.VERSION = "1.1.2"   -- the setup wizard shows the pages of features newer than the last version seen
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\media\\"
 
 function ns.Tex(name)

@@ -298,7 +298,7 @@ E.AmmoCount = ammoCount
 def("ammo", {
     class = "HUNTER",
     icon = "Interface\\Icons\\INV_Ammo_Arrow_02",
-    flash = true,
+    -- no flash: the count changes with every shot
     text = function()
         -- the ammo you carry first, the free slots of the ammo pouch after it in grey
         local n = ammoCount()
