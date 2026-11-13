@@ -46,6 +46,31 @@ local WHERE_FLASK = function() return { { "raid", L.WHERE_RAID }, { "instance", 
 local SHAPES = function() return { { "panel", L.SHAPE_PANEL }, { "round", L.BORDER_ROUND }, { "square", L.BORDER_SQUARE },
     { "none", L.NONE } } end
 
+-- "More addons from us": our other addons, with a hint where to get them (shown only here, never in the game)
+local MORE = {
+    { folder = "DarkmoonArcade", name = "Darkmoon Arcade", logo = "more-darkmoonarcade", text = "MORE_DARKMOON",
+      url = "https://www.curseforge.com/wow/addons/darkmoon-arcade" },
+}
+local function loaded(folder)
+    local A = C_AddOns
+    if A and A.IsAddOnLoaded then return A.IsAddOnLoaded(folder) or A.IsAddOnLoaded(folder .. "_Dev") end
+    return IsAddOnLoaded and (IsAddOnLoaded(folder) or IsAddOnLoaded(folder .. "_Dev"))
+end
+-- one tile per addon: its logo (shipped with this addon, so it shows without the other one), name, what it is,
+-- installed or where to get it
+function O.MoreAddons()
+    local tiles = {}
+    for _, a in ipairs(MORE) do
+        -- the development copy can show the page as if none were installed: /fqp more
+        local have = loaded(a.folder) and not (ns.name == "ForeverQoLPanel_Dev" and ns.db.devMoreMissing)
+        tiles[#tiles + 1] = { logo = ns.Tex(a.logo), name = a.name, text = L[a.text],
+            status = have and ("|cff20ff20" .. L.MORE_INSTALLED .. "|r") or ("|cffffd100" .. L.MORE_GET:format(a.name) .. "|r"),
+            -- not installed: a button with the CurseForge link to copy
+            button = not have and a.url and { L.MORE_LINK, function() ns.UI.CopyLink(L.MORE_LINK_TITLE:format(a.name), a.url) end } or nil }
+    end
+    return { { type = "text", label = L.MORE_TIP }, { type = "tiles", tiles = tiles } }
+end
+
 -- Pages in groups (shown as titles in the list). A page with `master` gets the feature's on/off switch in its header,
 -- the list greys out switched-off features. build() -> specs (UI.lua).
 local PAGES = {
@@ -326,8 +351,13 @@ local PAGES = {
             check(L.OPT_TT_SELL, nil, tooltip, "sellValue", Td),
             check(L.OPT_TT_COUNTS, L.OPT_TT_COUNTS_TIP, tooltip, "counts", Td),
             check(L.OPT_TT_GATHER, L.OPT_TT_GATHER_TIP, tooltip, "gather", Td),
+            check(L.OPT_TT_BEASTS, L.OPT_TT_BEASTS_TIP, tooltip, "beasts", { "tooltip", "hunter" }),
         }
     end },
+
+    -- More addons from us: last in the list, its own page
+    { group = "NAV_MORE", icon = "Interface\\Icons\\INV_Misc_Ticket_Darkmoon_01", title = "SEC_MORE_ADDONS",
+        build = function() return O.MoreAddons() end },
 }
 O.PAGES = PAGES
 

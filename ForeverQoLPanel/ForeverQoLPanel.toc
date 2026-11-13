@@ -21,6 +21,8 @@ Gameplay.lua
 Mail.lua
 Warnings.lua
 Tooltip.lua
+BeastData.lua
+Beasts.lua
 Mover.lua
 Dock.lua
 UI.lua

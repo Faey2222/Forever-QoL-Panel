@@ -172,6 +172,44 @@ def main() -> int:
         -- hunter: low ammo warns; warlock: shard element; new mail glows
         local realClass = UnitClass
         UnitClass = function() return "Hunter", "HUNTER" end
+        -- beast tooltip: Ragged Scavenger (1509) teaches Bite 1; the Beast Training window says Bite 2 is known
+        do
+            local tt = { lines = {}, scripts = {} }
+            function tt:GetUnit() return "Ragged Scavenger", "mouseover" end
+            function tt:AddLine(t) table.insert(self.lines, t) end
+            function tt:Show() end
+            UnitCreatureFamily = function() return "Wolf" end
+            UnitGUID = function() return "Creature-0-1-2-3-1509-0000" end
+            UnitAttackSpeed = function() return 1.5 end
+            ns.Beasts:Unit(tt)
+            local text = table.concat(tt.lines, " | ")
+            assert(text:find("Spell17253 %(Rang 1%)") and not text:find("Petopia") and text:find("1,5"), "beast tooltip: " .. text)
+            GetNumCrafts = function() return 1 end
+            GetCraftInfo = function() return "Biss", "Rang 2", "used" end
+            GetCraftIcon = function() return "Interface\\\\Icons\\\\Ability_Druid_FerociousBite" end
+            ns.Beasts:ReadTraining()
+            tt.lines, tt.fqpBeast = {}, nil
+            ns.Beasts:Unit(tt)
+            text = table.concat(tt.lines, " | ")
+            assert(text:find("Biss") and text:find("bekannt"), "beast tooltip after training: " .. text)
+            -- Forever: Beast Training as a trainer window; Claw 3 known there, the "used" filter switched off
+            GetNumCrafts, GetCraftInfo, GetCraftIcon = nil, nil, nil
+            ForeverQoLPanelDB.beasts.known = {}
+            local filters = { available = true, unavailable = true, used = false }
+            GetTrainerServiceTypeFilter = function(t) return filters[t] end
+            SetTrainerServiceTypeFilter = function(t, v) filters[t] = v == 1 end
+            GetNumTrainerServices = function() return filters.used and 2 or 1 end
+            GetTrainerServiceInfo = function(i) if i == 1 then return "Spell16827", "available", 132140, "Rang 3" end return "Spell17253", "used", 132278 end
+            GetTrainerServiceIcon = function() return nil end
+            UnitExists = function() return false end
+            ns.Beasts:ReadTrainer("TRAINER_SHOW")
+            assert(filters.used == false, "trainer filter not restored")
+            local k = ForeverQoLPanelDB.beasts.known
+            local mine; for _, v in pairs(k) do mine = v end
+            assert(mine and mine.claw == 3 and mine.bite == 1, "trainer window not read")
+            UnitCreatureFamily, UnitGUID, UnitAttackSpeed = nil, nil, nil
+            GetNumTrainerServices, GetTrainerServiceInfo, GetTrainerServiceIcon, GetTrainerServiceTypeFilter, SetTrainerServiceTypeFilter = nil, nil, nil, nil, nil
+        end
         -- ammo counted from the bags: 2 stacks of arrows (class 6/2) with a bow equipped, a gun's bullets ignored
         local realInfo, realInstant, realID = C_Container.GetContainerItemInfo, C_Item.GetItemInfoInstant, GetInventoryItemID
         C_Container.GetContainerItemInfo = function(bag, slot)

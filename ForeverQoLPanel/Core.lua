@@ -2,7 +2,7 @@ local ADDON, ns = ...
 
 ns.name = ADDON
 ns.title = "Forever QoL Panel"
-ns.VERSION = "1.2.0"   -- the setup wizard shows the pages of features newer than the last version seen
+ns.VERSION = "1.3.0"   -- the setup wizard shows the pages of features newer than the last version seen
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\media\\"
 
 function ns.Tex(name)
@@ -176,7 +176,8 @@ ns.defaults = {
         combat = false, scale = 1, foodWhere = "instance", flask = true, flaskWhere = "raid",
         iconShape = "panel", anim = "pulse", animRepeat = "once",
         hideWithWindows = true, ammo = true, ammoMin = 200, hideResting = false },   -- pos / link: placement of the two groups
-    tooltip = { enabled = true, sellValue = true, counts = true, gather = true },
+    tooltip = { enabled = true, sellValue = true, counts = true, gather = true, beasts = true },
+    beasts = { known = {}, names = {} },   -- Beasts.lua: [name-realm] = { [ability] = rank }, names in the client's language
     items = {},     -- [realm]["Faction:Name"] = { class, bags = { [itemID] = count }, bank = { ... } }
     session = {},   -- [name-realm] = gold and XP of the running session, kept over /reload
     language = "auto",
@@ -404,6 +405,11 @@ SlashCmdList.FOREVERQOLPANEL = function(msg)
     elseif cmd == "gap" and num then setting("gap", math.max(4, math.min(40, num)))
     elseif cmd == "move" then
         ns.Mover:Toggle()
+    elseif cmd == "more" and ns.name == "ForeverQoLPanel_Dev" then
+        -- development copy: the "More addons" page as if nothing were installed (and back)
+        ns.db.devMoreMissing = not ns.db.devMoreMissing or nil
+        if ns.Options.frame and ns.Options.frame:IsShown() then ns.Options:Render(true) end
+        print("|cffffd100" .. ns.title .. "|r: More addons shown as " .. (ns.db.devMoreMissing and "not installed" or "they are"))
     elseif cmd == "width" and num then setting("barWidth", math.max(200, math.min(2000, num)))
     elseif cmd == "delay" and num then setting("delay", math.max(0.5, math.min(30, num)))
     elseif cmd == "toggle" and arg and ns.db.panel.items[arg] ~= nil then

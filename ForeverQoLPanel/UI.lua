@@ -129,6 +129,20 @@ function UI.Window(name, opts)
     f.nav:SetWidth(NAV)
     f.navWidth = NAV
     f.navRows = {}
+    -- the list scrolls when the window is lower than it: mouse wheel, a thin gold bar shows where you are
+    f.navScroll = CreateFrame("ScrollFrame", nil, f.nav)
+    f.navScroll:SetPoint("TOPLEFT", 0, -4)
+    f.navScroll:SetPoint("BOTTOMRIGHT", 0, 4)
+    f.navList = CreateFrame("Frame", nil, f.navScroll)
+    f.navList:SetSize(NAV, 10)
+    f.navScroll:SetScrollChild(f.navList)
+    f.navScroll:EnableMouseWheel(true)
+    f.navScroll:SetScript("OnMouseWheel", function(_, delta) f:ScrollNav(f.navScroll:GetVerticalScroll() - delta * 62) end)
+    f.navScroll:SetScript("OnSizeChanged", function() f:ScrollNav(f.navScroll:GetVerticalScroll()) end)
+    f.navThumb = f.nav:CreateTexture(nil, "OVERLAY")
+    f.navThumb:SetColorTexture(1, 0.82, 0.25, 0.45)
+    f.navThumb:SetWidth(3)
+    f.navThumb:Hide()
 
     local b = inset(f)
     f.body = b
@@ -226,6 +240,22 @@ function Window:EnableSearch(onSearch)
     box:SetScript("OnEscapePressed", function(b) b:SetText(""); b:ClearFocus() end)
     self.search = box
     self.navTop = 38
+    self.navScroll:SetPoint("TOPLEFT", 0, -36)
+end
+
+-- scrolls the list to y (clamped) and places the position bar
+function Window:ScrollNav(y)
+    local view, total = self.navScroll:GetHeight() or 0, self.navList:GetHeight() or 0
+    local maxY = math.max(0, total - view)
+    y = math.max(0, math.min(maxY, y or 0))
+    self.navScroll:SetVerticalScroll(y)
+    local t = self.navThumb
+    if maxY <= 0 or view <= 0 then t:Hide() return end
+    local h = math.max(24, view * view / total)
+    t:ClearAllPoints()
+    t:SetPoint("TOPRIGHT", self.navScroll, "TOPRIGHT", -3, -(y / maxY) * (view - h))
+    t:SetHeight(h)
+    t:Show()
 end
 
 function Window:SetSearchHint(text)
@@ -256,11 +286,12 @@ end
 -- items: { { icon, title, mark = bool, new = text, off = bool } } or { header = text } for a group title;
 -- onClick(index) gets the index into items
 function Window:SetNav(items, active, onClick)
-    local y = self.navTop or 6
+    local y = 2
+    local activeTop, activeBottom
     for i, item in ipairs(items) do
         local r = self.navRows[i]
         if not r then
-            r = CreateFrame("Button", nil, self.nav)
+            r = CreateFrame("Button", nil, self.navList)
             listTextures(r)
             r.icon = r:CreateTexture(nil, "ARTWORK")
             r.icon:SetSize(22, 22)
@@ -309,11 +340,20 @@ function Window:SetNav(items, active, onClick)
             -- "NEW" in green, a switched-off feature says "Off" in grey
             r.new:SetText(item.new or (item.off and L.NAV_OFF) or "")
             if item.new then r.new:SetTextColor(0.12, 1, 0) else r.new:SetTextColor(0.5, 0.5, 0.5) end
+            if i == active then activeTop, activeBottom = y, y + 30 end
             y = y + 31
         end
         r:Show()
     end
     for i = #items + 1, #self.navRows do self.navRows[i]:Hide() end
+    self.navList:SetSize(self.navWidth, y + 4)
+    -- the chosen page stays in view
+    local cur, view = self.navScroll:GetVerticalScroll() or 0, self.navScroll:GetHeight() or 0
+    if activeTop and view > 0 then
+        if activeTop < cur then cur = activeTop - 4
+        elseif activeBottom > cur + view then cur = activeBottom - view + 4 end
+    end
+    self:ScrollNav(cur)
 end
 
 -- toggle: nil, or { get, set, label, tip } = the page's master switch, top right in the header
@@ -451,6 +491,66 @@ function MAKE.text(f)
     return w
 end
 
+-- a tile (the "More addons" page), upright: the logo on top, name, a few lines about it, a status line at the bottom
+local TILE_H, TILE_COLS = 236, 3
+function MAKE.tile(f)
+    local w = newCard(f)
+    w.glow = w:CreateTexture(nil, "BACKGROUND", nil, 2)
+    w.glow:SetPoint("TOPLEFT", 4, -4)
+    w.glow:SetPoint("TOPRIGHT", -4, -4)
+    w.glow:SetHeight(110)
+    w.glow:SetColorTexture(1, 1, 1, 1)
+    if w.glow.SetGradient and CreateColor then
+        w.glow:SetGradient("VERTICAL", CreateColor(1, 0.82, 0.3, 0), CreateColor(1, 0.82, 0.3, 0.1))
+    else
+        w.glow:SetVertexColor(1, 0.82, 0.3, 0.05)
+    end
+    w.logo = w:CreateTexture(nil, "ARTWORK")
+    w.logo:SetSize(88, 88)
+    w.logo:SetPoint("TOP", 0, -18)
+    w.name = w:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    w.name:SetPoint("TOP", w.logo, "BOTTOM", 0, -12)
+    w.text = w:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    w.text:SetPoint("TOP", w.name, "BOTTOM", 0, -8)
+    w.text:SetJustifyH("CENTER")
+    w.text:SetJustifyV("TOP")
+    w.text:SetSpacing(2)
+    w.text:SetTextColor(0.82, 0.82, 0.82)
+    w.status = w:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    w.status:SetPoint("BOTTOM", 0, 14)
+    -- a button in place of the status line (e.g. the download link to copy)
+    w.button = CreateFrame("Button", nil, w, "UIPanelButtonTemplate")
+    w.button:SetSize(160, 24)
+    w.button:SetPoint("BOTTOM", 0, 12)
+    w.button:Hide()
+    return w
+end
+
+-- A small window with a link in a text field, selected, to copy with Ctrl+C (the game cannot open web pages).
+function UI.CopyLink(title, url)
+    if not StaticPopupDialogs then return end
+    StaticPopupDialogs.FQP_COPY_LINK = StaticPopupDialogs.FQP_COPY_LINK or {
+        text = "%s", button1 = CLOSE or OKAY, hasEditBox = true, editBoxWidth = 360, timeout = 0,
+        whileDead = true, hideOnEscape = true, preferredIndex = 3,
+        OnShow = function(self, data)
+            local box = (self.GetEditBox and self:GetEditBox()) or rawget(self, "editBox") or rawget(self, "EditBox")
+            if not box then return end
+            box:SetText(data or "")
+            box:HighlightText()
+            box:SetFocus()
+            -- the text stays the link, whatever is typed
+            box:SetScript("OnTextChanged", function(b) if b:GetText() ~= data then b:SetText(data or ""); b:HighlightText() end end)
+        end,
+        OnHide = function(self)
+            local box = (self.GetEditBox and self:GetEditBox()) or rawget(self, "editBox") or rawget(self, "EditBox")
+            if box then box:SetScript("OnTextChanged", nil) end
+        end,
+        EditBoxOnEscapePressed = function(box) box:GetParent():Hide() end,
+        EditBoxOnEnterPressed = function(box) box:GetParent():Hide() end,
+    }
+    StaticPopup_Show("FQP_COPY_LINK", title, nil, url)
+end
+
 function MAKE.check(f)
     local w = newRow(f)
     w.box = CreateFrame("CheckButton", nil, w, "UICheckButtonTemplate")
@@ -546,6 +646,31 @@ function Window:Render(specs, onChange)
             w:SetSize(width, 26)
             w:SetPoint("TOPLEFT", 0, -y)
             y = y + 30
+        elseif s.type == "tiles" then
+            -- upright tiles, three per row
+            closeCard()
+            local n = #s.tiles
+            local cols = TILE_COLS
+            local tw = math.floor((width - 12 * (cols - 1)) / cols)
+            for i, t in ipairs(s.tiles) do
+                local w = take(f, "tile", function() return MAKE.tile(f) end)
+                local col, row = (i - 1) % cols, math.floor((i - 1) / cols)
+                w:SetSize(tw, TILE_H)
+                w:SetPoint("TOPLEFT", col * (tw + 12), -(y + row * (TILE_H + 12)))
+                w.logo:SetTexture(t.logo)
+                w.name:SetText(t.name)
+                w.text:SetWidth(tw - 28)
+                w.text:SetText(t.text)
+                w.status:SetWidth(tw - 28)
+                w.status:SetText(t.button and "" or (t.status or ""))
+                w.button:SetShown(t.button ~= nil)
+                if t.button then
+                    w.button:SetText(t.button[1])
+                    w.button:SetWidth(math.min(tw - 28, (w.button:GetFontString() and w.button:GetFontString():GetStringWidth() or 120) + 32))
+                    w.button:SetScript("OnClick", function() click(); t.button[2]() end)
+                end
+            end
+            y = y + math.ceil(n / cols) * (TILE_H + 12) + 4
         elseif s.type == "text" then
             closeCard()
             local w = take(f, "text", function() return MAKE.text(f) end)
