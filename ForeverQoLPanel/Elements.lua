@@ -235,14 +235,63 @@ local function ammoSlot()
     return 0
 end
 
--- the equipped ammo: count of that ammo in the bags (the client counts all stacks), its link
+-- Ammo in the bags, the kind the ranged weapon shoots: arrows for bows and crossbows, bullets for guns (both
+-- without a known weapon). Counted from the bags, because the client may have no readable ammo slot at all.
+local PROJECTILE, ARROW, BULLET = 6, 2, 3
+local BOW, GUN, CROSSBOW = 2, 3, 18
+local function itemClass(id)
+    if not id then return nil end
+    local get = C_Item and C_Item.GetItemInfoInstant or GetItemInfoInstant
+    if not get then return nil end
+    local ok, _, _, _, _, _, classID, subID = pcall(get, id)
+    if ok then return classID, subID end
+end
+
+local function wantedAmmo()
+    local id = GetInventoryItemID and GetInventoryItemID("player", 18)
+    local classID, subID = itemClass(id)
+    if classID == 2 and subID == GUN then return BULLET end
+    if classID == 2 and (subID == BOW or subID == CROSSBOW) then return ARROW end
+    return nil
+end
+
+local CC = C_Container
+-- counted once per bag change, not on every panel update
+local ammoCache
+ns.On("BAG_UPDATE_DELAYED", function() ammoCache = nil end)
+ns.On("UNIT_INVENTORY_CHANGED", function(_, unit) if unit == "player" then ammoCache = nil end end)
+local function bagAmmo()
+    if ammoCache then return ammoCache[1], ammoCache[2] end
+    local want, total, link = wantedAmmo(), 0, nil
+    for bag = 0, (NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4) do
+        local n = (CC and CC.GetContainerNumSlots or GetContainerNumSlots)(bag) or 0
+        for slot = 1, n do
+            local id, count, l
+            if CC and CC.GetContainerItemInfo then
+                local info = CC.GetContainerItemInfo(bag, slot)
+                if info then id, count, l = info.itemID, info.stackCount, info.hyperlink end
+            end
+            local classID, subID = itemClass(id)
+            if classID == PROJECTILE and (not want or subID == want) then
+                total = total + (count or 1)
+                link = link or l
+            end
+        end
+    end
+    ammoCache = { total, link }
+    return total, link
+end
+
+-- the ammo you carry and a link to show; the equipped ammo slot first where the client has one
 local function ammoCount()
     local slot = ammoSlot()
     local link = GetInventoryItemLink and GetInventoryItemLink("player", slot)
-    if not link then return nil end
-    local ok, n = pcall(GetInventoryItemCount, "player", slot)
-    if not ok or ns.Secret(n) then return nil, link end
-    return n or 0, link
+    if link then
+        local ok, n = pcall(GetInventoryItemCount, "player", slot)
+        if ok and n and not ns.Secret(n) and n > 0 then return n, link end
+    end
+    local n, bagLink = bagAmmo()
+    return n, link or bagLink
 end
 E.AmmoCount = ammoCount
 
@@ -261,12 +310,9 @@ def("ammo", {
     end,
     tip = function(tt)
         slotTip(tt, "ammo", L.ITEM_ammo, L.NO_AMMO_BAG)
-        local slot = ammoSlot()
-        local link = GetInventoryItemLink and GetInventoryItemLink("player", slot)
-        if link then
-            tt:AddLine(" ")
-            line(tt, link, num(GetInventoryItemCount and GetInventoryItemCount("player", slot) or 0))
-        end
+        local n, link = ammoCount()
+        tt:AddLine(" ")
+        line(tt, link or L.ITEM_ammo, num(n or 0))
         hint(tt, L.CLICK_BAGS)
     end,
     click = openBags,

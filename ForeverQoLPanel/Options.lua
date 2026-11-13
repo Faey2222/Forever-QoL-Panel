@@ -388,6 +388,9 @@ function O:Open(i)
         local wizard = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
         wizard:SetSize(180, 24)
         f.wizardButton = wizard
+        f.version = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        f.version:SetPoint("BOTTOM", 0, 18)
+        f.version:SetText(ns.title .. " " .. ns.VERSION .. (ns.name == "ForeverQoLPanel_Dev" and "  (dev)" or ""))
         wizard:SetPoint("BOTTOMLEFT", 12, 12)
         wizard:SetScript("OnClick", function() ns.Wizard:Open(true) end)
         f.onLayout = function() O:Render(true) end

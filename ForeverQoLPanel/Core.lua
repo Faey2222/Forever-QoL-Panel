@@ -2,7 +2,7 @@ local ADDON, ns = ...
 
 ns.name = ADDON
 ns.title = "Forever QoL Panel"
-ns.VERSION = "1.1.0"   -- the setup wizard shows the pages of features newer than the last version seen
+ns.VERSION = "1.1.1"   -- the setup wizard shows the pages of features newer than the last version seen
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\media\\"
 
 function ns.Tex(name)
@@ -254,7 +254,9 @@ ns.On("ADDON_LOADED", function(_, name)
     if db.version < 2 then db.panel.logPreview = false end
     -- 3: calm, static look for finished quests
     if db.version < 3 and db.panel.questStyle == "shimmer" then db.panel.questStyle = "veil" end
-    db.version = 3
+    -- 4 (1.1.1): the ammo element now counts the ammo; on once for everyone (it only shows for hunters)
+    if db.version < 4 and db.panel and db.panel.items then db.panel.items.ammo = true end
+    db.version = 4
     -- elements added in a later version join the saved order next to their default neighbour
     local order, defaults = db.panel.order, ns.defaults.panel.order
     for i, key in ipairs(defaults) do

@@ -172,6 +172,31 @@ def main() -> int:
         -- hunter: low ammo warns; warlock: shard element; new mail glows
         local realClass = UnitClass
         UnitClass = function() return "Hunter", "HUNTER" end
+        -- ammo counted from the bags: 2 stacks of arrows (class 6/2) with a bow equipped, a gun's bullets ignored
+        local realInfo, realInstant, realID = C_Container.GetContainerItemInfo, C_Item.GetItemInfoInstant, GetInventoryItemID
+        C_Container.GetContainerItemInfo = function(bag, slot)
+            if bag == 1 and slot <= 2 then return { itemID = 2512, stackCount = 200, hyperlink = "|Hitem:2512|h[Rough Arrow]|h" } end
+            if bag == 1 and slot == 3 then return { itemID = 2516, stackCount = 200 } end
+        end
+        C_Item.GetItemInfoInstant = function(id)
+            if id == 2512 then return id, "", "", "", 0, 6, 2 end
+            if id == 2516 then return id, "", "", "", 0, 6, 3 end
+            if id == 100 then return id, "", "", "", 0, 2, 2 end
+        end
+        GetInventoryItemID = function(_, slot) return slot == 18 and 100 or nil end
+        -- like Forever: the ammo slot cannot be read
+        local realLink = GetInventoryItemLink
+        GetInventoryItemLink = function(_, slot) if slot ~= 0 then return realLink() end end
+        MOCK_fire("BAG_UPDATE_DELAYED")
+        local ammoN = ns.Elements.AmmoCount()
+        assert(ammoN == 400, "ammo from bags: " .. tostring(ammoN))
+        local found2 = false
+        ForeverQoLPanelDB.warnings.ammoMin = 900
+        for _, w in ipairs(ns.Warnings:Check()) do if w[4] == "ammo" then found2 = w[2] end end
+        assert(found2 and not found2:find("Keine"), "warning should give the count, got " .. tostring(found2))
+        C_Container.GetContainerItemInfo, C_Item.GetItemInfoInstant, GetInventoryItemID = realInfo, realInstant, realID
+        GetInventoryItemLink = realLink
+        MOCK_fire("BAG_UPDATE_DELAYED")
         ForeverQoLPanelDB.warnings.ammoMin = 900
         local found = false
         for _, w in ipairs(ns.Warnings:Check()) do if w[4] == "ammo" then found = true end end
