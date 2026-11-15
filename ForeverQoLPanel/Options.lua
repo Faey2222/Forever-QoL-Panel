@@ -17,6 +17,43 @@ local panel, opts = db("panel"), function() return ns.db.panel.opt end
 local minimap, actionbar, gameplay = db("minimap"), db("actionbar"), db("gameplay")
 local nameplates, warnings, tooltip, root = db("nameplates"), db("warnings"), db("tooltip"), db(nil)
 local layout = db("layout")
+local lootopt = db("lootopt")
+
+-- the loot optimizer's weights for your class and the profile it rates for: one slider per stat that counts
+local RANGE = { CritRating = 30, HitRating = 30, HasteRating = 30, ExpertiseRating = 30, DodgeRating = 30, ParryRating = 30,
+    BlockRating = 15, MeleeDps = 25, RangedDps = 25, Mp5 = 6 }
+local function weightSpecs()
+    local LO = ns.LootOpt
+    local cls = select(2, UnitClass("player"))
+    local profile = LO.Profile(cls)
+    local w, base = LO.Weights(cls, profile)
+    local list = {}
+    for _, key in ipairs(LO.ORDER) do
+        if (base[key] or 0) > 0 or (w[key] or 0) > 0 then
+            local top = math.max(RANGE[key] or 2, math.ceil((base[key] or 0) * 2 * 10) / 10)
+            list[#list + 1] = { type = "slider", label = LO.StatName(key), min = 0, max = top,
+                step = top <= 0.2 and 0.005 or (top <= 3 and 0.01 or 0.1), needs = { "lootopt" },
+                get = function() return LO.Weights(cls, profile)[key] or 0 end,
+                set = function(v)
+                    local d = ns.db.lootopt
+                    d.weights[cls] = d.weights[cls] or {}
+                    d.weights[cls][profile] = type(d.weights[cls][profile]) == "table" and d.weights[cls][profile] or {}
+                    d.weights[cls][profile][key] = v
+                end }
+        end
+    end
+    if (w.HitRating or 0) > 0 then
+        list[#list + 1] = { type = "slider", label = L.LO_CAP:format(LO.StatName("HitRating")), tip = L.LO_CAP_TIP,
+            min = 0, max = 20, step = 0.5, suffix = " %", needs = { "lootopt" },
+            get = function() return LO.Caps(cls, profile).HitRating end,
+            set = function(v)
+                local d = ns.db.lootopt
+                d.caps[cls] = type(d.caps[cls]) == "table" and d.caps[cls] or {}
+                d.caps[cls][profile] = v
+            end }
+    end
+    return list
+end
 
 -- value accessors for a spec
 local function bind(s, tbl, key, onChange)
@@ -94,6 +131,7 @@ local PAGES = {
             slider(L.OPT_GRID_SIZE, nil, "gridSize", 8, 64, 4, " px", nil, layout),
             header(L.WZ_OPEN),
             buttons(L.WZ_OPEN, L.WZ_OPEN_TIP, { { L.WZ_OPEN_BTN, function() ns.Wizard:Open(true) end } }),
+            buttons(L.WZ_NEWS, L.WZ_NEWS_TIP, { { L.WZ_NEWS_BTN, function() ns.Wizard:OpenNews() end } }),
         }
     end },
 
@@ -258,6 +296,49 @@ local PAGES = {
             buttons(L.AB_BTN_PLACE, L.AB_BTN_PLACE_TIP, { { L.AB_BTN_RUN, function() ns.ActionBar:PlaceMissing() end } }),
         }
     end },
+    { group = "NAV_AUTOMATION", icon = "Interface\\Icons\\INV_Misc_Bag_10_Blue", title = "SEC_LOOTOPT",
+        master = { lootopt, "enabled", tip = "OPT_LOOTOPT_TIP" }, build = function()
+        local O2 = { "lootopt" }
+        local specs = { { "auto", L.LO_SPEC_AUTO } }
+        for _, p in ipairs(ns.LootOpt.Profiles()) do specs[#specs + 1] = { p.key, p.label } end
+        local list = {
+            header(L.LO_SEC_SHOW),
+            check(L.OPT_LO_TOOLTIP, L.OPT_LO_TOOLTIP_TIP, lootopt, "tooltip", O2),
+            check(L.OPT_LO_UPGRADE, L.OPT_LO_UPGRADE_TIP, lootopt, "upgrade", O2),
+            slider(L.OPT_LO_THRESHOLD, L.OPT_LO_THRESHOLD_TIP, "threshold", 1, 25, 1, " %", O2, lootopt, true),
+            buttons(L.LO_IGNORED_UP, L.LO_IGNORED_UP_TIP, { { L.LO_RESET, function() ns.LootOpt:ResetIgnored("upgrade") end } }, O2),
+            check(L.OPT_LO_FULL, L.OPT_LO_FULL_TIP, lootopt, "bagsFull", O2),
+            buttons(L.LO_IGNORED_FULL, L.LO_IGNORED_FULL_TIP, { { L.LO_RESET, function() ns.LootOpt:ResetIgnored("full") end } }, O2),
+            header(L.LO_SEC_RATING),
+            choice(L.OPT_LO_SPEC, L.OPT_LO_SPEC_TIP, lootopt, "spec", specs, O2),
+            { type = "text", label = L.LO_WEIGHTS_TIP },
+        }
+        for _, s in ipairs(weightSpecs()) do list[#list + 1] = s end
+        list[#list + 1] = buttons(L.LO_SHARE, L.LO_SHARE_TIP, {
+            { L.LO_EXPORT, function()
+                local LO = ns.LootOpt
+                ns.UI.CopyLink(L.LO_EXPORT_TITLE:format(UnitClass("player") or "?", LO.ProfileLabel(LO.Profile())), LO.Export())
+            end },
+            { L.LO_IMPORT, function()
+                local LO = ns.LootOpt
+                ns.UI.AskText(L.LO_IMPORT_TITLE:format(UnitClass("player") or "?", LO.ProfileLabel(LO.Profile())), function(text)
+                    local n = ns.LootOpt.Import(text)
+                    print("|cffffd100" .. ns.title .. "|r: " .. (n and L.LO_IMPORT_OK:format(n) or L.LO_IMPORT_BAD))
+                    if n and O.frame and O.frame:IsShown() then O:Render(true) end
+                end)
+            end },
+        }, O2)
+        list[#list + 1] = buttons(L.LO_RESET_WEIGHTS, L.LO_RESET_TIP, {
+            { L.LO_RESET, function()
+                local cls = select(2, UnitClass("player"))
+                local d = ns.db.lootopt
+                local profile = ns.LootOpt.Profile()
+                if d.weights[cls] then d.weights[cls][profile] = nil end
+                if type(d.caps[cls]) == "table" then d.caps[cls][profile] = nil end
+            end },
+        }, O2)
+        return list
+    end },
     { group = "NAV_AUTOMATION", icon = "Interface\\Icons\\INV_Scroll_03", title = "SEC_GAMEPLAY",
         master = { gameplay, "enabled", tip = "OPT_GAMEPLAY_TIP" }, build = function()
         local G = { "gameplay" }
@@ -273,6 +354,8 @@ local PAGES = {
             check(L.OPT_GP_GUILD, nil, gameplay, "guildRepair", G, { indent = true }),
             header(L.SEC_LOOT),
             check(L.OPT_GP_FASTLOOT, L.OPT_GP_FASTLOOT_TIP, gameplay, "fastLoot", G),
+            bind({ type = "check", label = L.OPT_GP_SPARKLE, tip = L.OPT_GP_SPARKLE_TIP, needs = G, restart = true }, gameplay, "lootSparkle",
+                function() ns.Gameplay:SparkleChanged() end),
             header(L.SEC_MAIL),
             check(L.OPT_GP_MAILALTS, L.MAIL_ALTS_TIP, gameplay, "mailAlts", G),
         }
@@ -373,7 +456,7 @@ function O:Render(keepScroll)
     local f = self.frame
     -- texts that are set here, not at creation: the language may change while the window is open
     if f.closeButton then f.closeButton:SetText(L.CLOSE_BTN) end
-    if f.wizardButton then f.wizardButton:SetText(L.WZ_OPEN) end
+    if f.wizardButton then f.wizardButton:SetText(L.OPT_MOVE) end
     if f.SetSearchHint then f:SetSearchHint(L.SEARCH_HINT) end
     local page = PAGES[self.index]
     -- list with group titles; navIndex -> page index
@@ -399,14 +482,15 @@ function O:Render(keepScroll)
     if page.master then
         local m = page.master
         local missing = m.needs and ns.UI.Missing(m.needs)
-        toggle = { get = function() return m[1]()[m[2]] end, set = function(v) m[1]()[m[2]] = v end,
+        toggle = { get = function() return m[1]()[m[2]] end,
+            set = function(v) m[1]()[m[2]] = v; if m.reload then O.pendingReload = true end end,
             tip = (m.tip and L[m.tip] or "") .. (m.reload and ("\n|cffa0a0a0" .. L.NEEDS_RELOAD .. "|r") or "")
                 .. (missing and ("\n|cffff8a6a" .. missing .. "|r") or ""),
             onChange = function() O:Render(true) end }
     end
     f:SetHead(page.icon, L[page.title], L[page.group], nil, toggle)
     local scroll = keepScroll and f.scroll.GetVerticalScroll and f.scroll:GetVerticalScroll()
-    f:Render(page.build(), function() O:Render(true) end)
+    f:Render(O.Track(page.build()), function() O:Render(true) end)
     if f.scroll.SetVerticalScroll then f.scroll:SetVerticalScroll(scroll or 0) end
 end
 
@@ -434,6 +518,7 @@ function O:RenderSearch(keepScroll)
             local m = p.master
             local s = { type = "check", label = L.OPT_ENABLED, tip = m.tip and L[m.tip], needs = m.needs, reload = m.reload,
                 get = function() return m[1]()[m[2]] end, set = function(v) m[1]()[m[2]] = v end }
+            O.Track({ s })
             found[#found + 1] = s
         end
         for _, s in ipairs(p.build()) do
@@ -459,8 +544,38 @@ function O:RenderSearch(keepScroll)
     if count == 0 then list[1] = { type = "text", label = L.SEARCH_NONE } end
     f:SetHead("Interface\\Icons\\INV_Misc_Spyglass_02", L.SEARCH_TITLE, L.SEARCH_RESULTS:format(count))
     local scroll = keepScroll and f.scroll.GetVerticalScroll and f.scroll:GetVerticalScroll()
-    f:Render(list, function() O:Render(true) end)
+    f:Render(O.Track(list), function() O:Render(true) end)
     if f.scroll.SetVerticalScroll then f.scroll:SetVerticalScroll(scroll or 0) end
+end
+
+-- Settings that only take effect after reloading the interface (reload = true) note it when changed; closing the
+-- window then asks whether to reload now. A game restart (the loot sparkle) is said there too.
+function O.Track(specs)
+    for _, s in ipairs(specs) do
+        if s.reload and s.set and not s.tracked then
+            local set = s.set
+            s.set = function(v) set(v); O.pendingReload = true end
+            s.tracked = true
+        end
+    end
+    return specs
+end
+
+function O:AskReload()
+    if ns.Mover and ns.Mover.active then return end   -- hidden for the move mode: asked on the real close
+    local reload, restart = self.pendingReload, self.pendingRestart
+    if not (reload or restart) or not StaticPopupDialogs then return end
+    self.pendingReload, self.pendingRestart = nil, nil
+    local text = reload and L.ASK_RELOAD or L.NOTE_RESTART
+    if reload and restart then text = text .. "\n\n" .. L.NOTE_RESTART end
+    StaticPopupDialogs.FQP_RELOAD = {
+        text = ns.title .. "\n\n" .. text,
+        button1 = reload and L.RELOAD_NOW or (OKAY or "OK"),
+        button2 = reload and L.RELOAD_LATER or nil,
+        OnAccept = function() if reload then ReloadUI() end end,
+        timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+    }
+    StaticPopup_Show("FQP_RELOAD")
 end
 
 function O:Show(i)
@@ -483,9 +598,11 @@ function O:Open(i)
         f.version = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         f.version:SetPoint("BOTTOM", 0, 18)
         f.version:SetText(ns.title .. " " .. ns.VERSION .. (ns.name == "ForeverQoLPanel_Dev" and "  (dev)" or ""))
+        -- bottom left: the move mode (the setup wizard is on the General page)
         wizard:SetPoint("BOTTOMLEFT", 12, 12)
-        wizard:SetScript("OnClick", function() ns.Wizard:Open(true) end)
+        wizard:SetScript("OnClick", function() ns.Mover:Toggle(true) end)
         f.onLayout = function() O:Render(true) end
+        f:HookScript("OnHide", function() O:AskReload() end)
         f:EnableSearch(function(text)
             if text == (O.query or "") then return end
             O.query = text

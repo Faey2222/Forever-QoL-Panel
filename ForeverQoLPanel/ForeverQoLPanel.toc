@@ -23,6 +23,8 @@ Warnings.lua
 Tooltip.lua
 BeastData.lua
 Beasts.lua
+WeightData.lua
+LootOpt.lua
 Mover.lua
 Dock.lua
 UI.lua

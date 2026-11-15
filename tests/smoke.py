@@ -181,8 +181,12 @@ def main() -> int:
             UnitCreatureFamily = function() return "Wolf" end
             UnitGUID = function() return "Creature-0-1-2-3-1509-0000" end
             UnitAttackSpeed = function() return 1.5 end
+            local realExists = UnitExists
+            UnitExists = function(u) return u == "pet" end
             ns.Beasts:Unit(tt)
             local text = table.concat(tt.lines, " | ")
+            assert(text:find("Begleiter %(Wolf%) kann es lernen"), "pet line: " .. text)
+            UnitExists = realExists
             assert(text:find("Spell17253 %(Rang 1%)") and not text:find("Petopia") and text:find("1,5"), "beast tooltip: " .. text)
             GetNumCrafts = function() return 1 end
             GetCraftInfo = function() return "Biss", "Rang 2", "used" end
@@ -245,6 +249,53 @@ def main() -> int:
         assert(ns.Elements:Available("shards"), "shards for warlocks")
         ns.Elements.defs.shards.text(); ns.Elements.defs.shards.tip(GameTooltip)
         for _, w in ipairs(ns.Warnings:Check()) do assert(w[4] ~= "ammo", "ammo warning for a warlock") end
+        -- loot optimizer: a warrior, chest +10 Str +5 Sta against worn +5 Str
+        do
+            local LO = ns.LootOpt
+            local realItemInfo, realInvLink, realStats, realLevel = ns.ItemInfo, GetInventoryItemLink, GetItemStats, UnitLevel
+            UnitClass = function() return "Warrior", "WARRIOR" end
+            UnitLevel = function() return 20 end
+            ns.ItemInfo = function(link)
+                if link == "new" then return "New Chest", "new", 2, 20, 15, "", "", 1, "INVTYPE_CHEST", 1, 100, 4, 3, 2 end
+                if link == "old" then return "Old Chest", "old", 1, 10, 5, "", "", 1, "INVTYPE_CHEST", 1, 50, 4, 3, 1 end
+                if link == "robe" then return "Robe", "robe", 1, 10, 5, "", "", 1, "INVTYPE_CHEST", 1, 50, 4, 1, 1 end
+                if link == "plate" then return "Plate", "plate", 2, 40, 40, "", "", 1, "INVTYPE_CHEST", 1, 50, 4, 4, 1 end
+                return realItemInfo(link)
+            end
+            GetInventoryItemLink = function(_, slot) if slot == 5 then return "old" end end
+            GetItemStats = function(link)
+                if link == "new" then return { ITEM_MOD_STRENGTH_SHORT = 10, ITEM_MOD_STAMINA_SHORT = 5 } end
+                if link == "old" then return { ITEM_MOD_STRENGTH_SHORT = 5 } end
+                if link == "robe" or link == "plate" then return { ITEM_MOD_STRENGTH_SHORT = 1 } end
+                return {}
+            end
+            local r = LO:Compare("new")
+            assert(r and r.slot == 5 and r.pct and r.pct > 100, "loot compare: " .. tostring(r and r.pct))
+            assert(LO:Compare("plate") == nil, "plate before level 40")
+            assert(LO:Compare("robe"), "cloth for a warrior")
+            local line = LO.Export()
+            assert(line:find("^FQPW2;WARRIOR;arms;") and line:find("Strength=1"), "export: " .. line)
+            assert(LO.Import((line:gsub("Strength=1;", "Strength=2;"))) and LO.Weights().Strength == 2 and LO.Weights().SpellDamage == 0, "import")
+            assert(LO.Import("hallo") == nil, "bad import accepted")
+            ForeverQoLPanelDB.lootopt.weights = {}; ForeverQoLPanelDB.lootopt.caps = {}
+            local lines = {}
+            local realGet, realAdd = GameTooltip.GetItem, GameTooltip.AddLine
+            GameTooltip.GetItem = function() return "New Chest", "new" end
+            GameTooltip.AddLine = function(_, t) lines[#lines + 1] = t end; GameTooltip.AddDoubleLine = function(_, t) lines[#lines + 1] = t end
+            GameTooltip.IsShown = function() return true end
+            LO:Tooltip(GameTooltip); LO.Place(GameTooltip)
+            GameTooltip.GetItem, GameTooltip.AddLine = realGet, realAdd
+            assert(GameTooltip.fqpLoot and GameTooltip.fqpLoot.text:find("besser") and ForeverQoLPanelLootTip:IsShown(), "loot tooltip")
+            LO:ShowUpgrade("new", r)
+            assert(LO.up:IsShown(), "upgrade window")
+            LO.up:Hide()
+            LOOT_ITEM_SELF = "Ihr erhaltet Beute: %s."
+            for _, ev in ipairs({ "LOOT_OPENED" }) do MOCK_fire(ev) end
+            LO:BagsFull()
+            assert(LO.full and LO.full:IsShown(), "bags full window")
+            LO.full:Hide()
+            ns.ItemInfo, GetInventoryItemLink, GetItemStats, UnitLevel = realItemInfo, realInvLink, realStats, realLevel
+        end
         UnitClass = realClass; ForeverQoLPanelDB.warnings.ammoMin = 200
         HasNewMail = function() return true end
         GetLatestThreeSenders = function() return "Bob", "Alice" end
@@ -286,6 +337,8 @@ def main() -> int:
         ns.Mover:Toggle(true); assert(ns.Mover.active and ns.Warnings.moving and ForeverQoLPanelGrid:IsShown(), "move mode not on")
         local sx, sy = ns.Mover.SnapCenter(ns.Dock.xpHolder)
         ns.Mover:Toggle(false); assert(not ns.Mover.active and not ns.Warnings.moving, "move mode stuck")
+        ns.Options:Open(); ns.Mover:Toggle(true); assert(not ns.Options.frame:IsShown(), "options not hidden for moving")
+        ns.Mover:Toggle(false); assert(ns.Options.frame:IsShown(), "options not back after moving"); ns.Options.frame:Hide()
         ns.Mail:Alts(); ns.FullName()
         -- removing a character that no longer exists
         local before = #ns.Characters()
@@ -385,11 +438,12 @@ def main() -> int:
         ns.Elements.defs.pvp.text(); ns.Elements.defs.pvp.tip(GameTooltip); ns.Elements.defs.pvp.click()
         ForeverQoLPanelDB.panel.border = 1; ns.Refresh(); ForeverQoLPanelDB.panel.border = 3; ns.Refresh()
         ns.Wizard:Open(true)
-        for _ = 1, 12 do ns.Wizard:Go(1) end
+        for _ = 1, 25 do ns.Wizard:Go(1) end
         assert(ForeverQoLPanelDB.wizard == ns.VERSION, "wizard not finished")
         ForeverQoLPanelDB.wizard = "0.1.0"; ns.Wizard:Open(false)
-        assert(#ns.Wizard.pages == 10, "update pages: " .. #ns.Wizard.pages)
+        assert(#ns.Wizard.pages == 15, "update pages: " .. #ns.Wizard.pages)
         for i = 1, 8 do ns.Wizard:Jump(i) end
+        ns.Wizard:OpenNews(); assert(#ns.Wizard.pages == 4 and ns.Wizard.pages[2].id == "lootopt", "news pages: " .. #ns.Wizard.pages)
         ns.Wizard.frame.tiles[1]:GetScript("OnClick")(ns.Wizard.frame.tiles[1])
         ns.Wizard:Finish()
         SlashCmdList.FOREVERQOLPANEL("reset")

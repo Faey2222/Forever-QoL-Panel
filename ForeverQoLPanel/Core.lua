@@ -2,7 +2,7 @@ local ADDON, ns = ...
 
 ns.name = ADDON
 ns.title = "Forever QoL Panel"
-ns.VERSION = "1.3.0"   -- the setup wizard shows the pages of features newer than the last version seen
+ns.VERSION = "1.4.0"   -- the setup wizard shows the pages of features newer than the last version seen
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\media\\"
 
 function ns.Tex(name)
@@ -168,8 +168,12 @@ ns.defaults = {
     minimap = { show = true, angle = 205, keep = {}, floating = true },   -- floating: collector button without panel
     actionbar = { enabled = true, placeNew = true, replaceRanks = true, general = false, messages = true, seen = {} },
     layout = { grid = true, snap = true, gridSize = 32 },   -- move mode (Mover.lua)
+    -- loot optimizer (LootOpt.lua): weights / caps = own values per class (and talent tree), ignore = never offered
+    -- to delete, ignoreUpgrade = never offered to put on
+    lootopt = { enabled = true, tooltip = true, upgrade = true, bagsFull = true, threshold = 3, spec = "auto",
+        weights = {}, caps = {}, ignore = {}, ignoreUpgrade = {} },
     gameplay = { enabled = true, questAccept = true, questTurnIn = true, gossip = true, rewardValue = true, sellGrey = true,
-        repair = true, guildRepair = true, fastLoot = true, lootText = true, mailAlts = true,
+        repair = true, guildRepair = true, fastLoot = true, lootText = true, mailAlts = true, lootSparkle = true,
         lootShape = "panel", lootScale = 1 },   -- lootPos: own place of the loot text
     nameplates = { enabled = true, position = "left", progress = true, size = 20, x = 0, y = 0 },
     warnings = { enabled = true, classBuffs = true, food = true, weapon = true, expiring = true, sound = false,

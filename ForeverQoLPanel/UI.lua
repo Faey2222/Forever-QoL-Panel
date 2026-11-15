@@ -34,6 +34,7 @@ UI.NEED = {
     addons = { function() return ns.db.panel.items.addons end, "ITEM_addons" },
     food = { function() return ns.db.warnings.food end, "OPT_WARN_FOOD" },
     xptext = { function() return ns.db.panel.xpText end, "OPT_XPTEXT" },
+    lootopt = { function() return ns.db.lootopt.enabled end, "SEC_LOOTOPT" },
     repbar = { function() return ns.db.panel.enabled and ns.db.panel.repBar end, "OPT_REPBAR" },
     repfree = { function() return ns.db.panel.repPlace == "free" end, "PLACE_FREE" },
     xpfree = { function() return ns.db.panel.xpPlace == "free" end, "PLACE_FREE" },
@@ -431,6 +432,8 @@ local function showTip(owner, row)
     GameTooltip:SetText(s.label, 1, 1, 1)
     if s.tip then GameTooltip:AddLine(s.tip, 1, 0.82, 0, true) end
     if s.reload then GameTooltip:AddLine(L.NEEDS_RELOAD, 0.62, 0.62, 0.62, true) end
+    -- needs a game restart (not just a reload): its own line in orange
+    if s.restart then GameTooltip:AddLine(L.NEEDS_RESTART, 1, 0.55, 0.2, true) end
     if row.missing then GameTooltip:AddLine(row.missing, 1, 0.54, 0.42, true) end
     GameTooltip:Show()
 end
@@ -524,6 +527,158 @@ function MAKE.tile(f)
     w.button:SetPoint("BOTTOM", 0, 12)
     w.button:Hide()
     return w
+end
+
+-- Windows in the panel's look ---------------------------------------------------------------------------
+-- Classic: the panel's bar border made into a frame: the corners are the quarters of the bar's rounded cap, the
+-- sides a slice from the middle of the cap (where its arc runs straight down), top and bottom the bar's straight
+-- edges; inside the panel's dark fill. Modern: the flat box with the rim colour, square or round corners. Both follow
+-- the panel's rim (bronze / silver / dark) and border width.
+local FILL_C, FILL_M = { 0.03, 0.025, 0.02, 0.92 }, { 0.05, 0.05, 0.06, 0.94 }
+local RIM_M = { bronze = { 0.52, 0.4, 0.24, 1 }, silver = { 0.56, 0.56, 0.6, 1 }, dark = { 0, 0, 0, 1 } }
+local RIM_C = { bronze = { 1, 1, 1 }, silver = { 1, 1, 1 }, dark = { 0.42, 0.42, 0.42 } }
+local SUFFIX = { "-thin", "", "-thick" }
+local K = 1                                   -- the classic border as wide as the panel's bar border (its width setting picks the texture)
+local CW, CH = 20 * K, 16 * K                 -- corner piece: 20 x 16 units of the cap's 33 x 32 canvas
+local CAP_U = 20 / 33 * 66 / 128              -- its width in texture coordinates
+local LINE = 6 * K                            -- where the line runs, from the outer edge
+local QUARTERS = { { 0, 1, 0, 1 }, { 1, 0, 0, 1 }, { 0, 1, 1, 0 }, { 1, 0, 1, 0 } }   -- TL, TR, BL, BR
+
+local function skinParts(f)
+    if f.skin then return f.skin end
+    local s = { c = {}, m = {} }
+    local function tex(layer, sub) return f:CreateTexture(nil, layer, nil, sub or 0) end
+    -- classic: fill (centre, top and bottom bands, round corners), border (corners, sides, top, bottom)
+    s.c.fill = { tex("BACKGROUND"), tex("BACKGROUND"), tex("BACKGROUND") }
+    s.c.fillCorner = { tex("BACKGROUND"), tex("BACKGROUND"), tex("BACKGROUND"), tex("BACKGROUND") }
+    s.c.corner = { tex("BORDER", 2), tex("BORDER", 2), tex("BORDER", 2), tex("BORDER", 2) }
+    s.c.left, s.c.right, s.c.top, s.c.bottom = tex("BORDER", 1), tex("BORDER", 1), tex("BORDER", 1), tex("BORDER", 1)
+    -- modern: fill, four lines, corner arcs and corner fills
+    s.m.fill = { tex("BACKGROUND"), tex("BACKGROUND"), tex("BACKGROUND") }
+    s.m.fillCorner = { tex("BACKGROUND"), tex("BACKGROUND"), tex("BACKGROUND"), tex("BACKGROUND") }
+    s.m.line = { tex("BORDER"), tex("BORDER"), tex("BORDER"), tex("BORDER") }
+    s.m.ring = { tex("BORDER", 1), tex("BORDER", 1), tex("BORDER", 1), tex("BORDER", 1) }
+    f.skin = s
+    return s
+end
+
+local function put(t, f, x, y, w, h)
+    t:ClearAllPoints()
+    if w <= 0 or h <= 0 then t:Hide() return end
+    t:SetPoint("TOPLEFT", f, "TOPLEFT", x, -y)
+    t:SetSize(w, h)
+    t:Show()
+end
+
+local function hideAll(list) for _, t in pairs(list) do if type(t) == "table" and t.Hide then t:Hide() elseif type(t) == "table" then hideAll(t) end end end
+
+-- lays the look out for the frame's current size; call again after resizing
+function UI.Skin(f)
+    if f.SetBackdrop then f:SetBackdrop(nil) end
+    local s = skinParts(f)
+    local p = ns.db.panel
+    local W, H = f:GetWidth() or 0, f:GetHeight() or 0
+    if p.skin == "modern" then
+        hideAll(s.c)
+        local th = p.border or 2
+        local r = p.corners == "round" and 6 or 0
+        local tint = RIM_M[p.rim] or RIM_M.bronze
+        for i = 1, 3 do s.m.fill[i]:SetColorTexture(unpack(FILL_M)) end
+        put(s.m.fill[1], f, r, 0, W - 2 * r, r)
+        put(s.m.fill[2], f, 0, r, W, H - 2 * r)
+        put(s.m.fill[3], f, r, H - r, W - 2 * r, r)
+        for i = 1, 4 do s.m.line[i]:SetColorTexture(unpack(tint)) end
+        put(s.m.line[1], f, r, 0, W - 2 * r, th)
+        put(s.m.line[2], f, r, H - th, W - 2 * r, th)
+        put(s.m.line[3], f, 0, r, th, H - 2 * r)
+        put(s.m.line[4], f, W - th, r, th, H - 2 * r)
+        local pos = { { 0, 0 }, { W - r, 0 }, { 0, H - r }, { W - r, H - r } }
+        for i = 1, 4 do
+            local q = QUARTERS[i]
+            if r > 0 then
+                s.m.fillCorner[i]:SetTexture(ns.Tex("corner"))
+                s.m.fillCorner[i]:SetVertexColor(unpack(FILL_M))
+                s.m.fillCorner[i]:SetTexCoord(q[1], q[2], q[3], q[4])
+                put(s.m.fillCorner[i], f, pos[i][1], pos[i][2], r, r)
+                s.m.ring[i]:SetTexture(ns.Tex("corner-ring-6-" .. math.min(3, th)))
+                s.m.ring[i]:SetVertexColor(unpack(tint))
+                s.m.ring[i]:SetTexCoord(q[1], q[2], q[3], q[4])
+                put(s.m.ring[i], f, pos[i][1], pos[i][2], r, r)
+            else
+                s.m.fillCorner[i]:Hide(); s.m.ring[i]:Hide()
+            end
+        end
+        return
+    end
+    hideAll(s.m)
+    local suffix = (SUFFIX[p.border or 2] or "") .. (p.rim == "bronze" and "" or "-silver")
+    local tint = RIM_C[p.rim] or RIM_C.bronze
+    local cap = ns.Tex("cap-bar" .. suffix)
+    -- fill inside the line, its corners round like the border's
+    local rr = CW - LINE
+    for i = 1, 3 do s.c.fill[i]:SetColorTexture(unpack(FILL_C)) end
+    put(s.c.fill[1], f, CW, LINE, W - 2 * CW, rr)
+    put(s.c.fill[2], f, LINE, LINE + rr, W - 2 * LINE, H - 2 * (LINE + rr))
+    put(s.c.fill[3], f, CW, H - LINE - rr, W - 2 * CW, rr)
+    local fpos = { { LINE, LINE }, { W - CW, LINE }, { LINE, H - CW }, { W - CW, H - CW } }
+    for i = 1, 4 do
+        local q, t = QUARTERS[i], s.c.fillCorner[i]
+        t:SetTexture(ns.Tex("corner"))
+        t:SetVertexColor(unpack(FILL_C))
+        t:SetTexCoord(q[1], q[2], q[3], q[4])
+        put(t, f, fpos[i][1], fpos[i][2], rr, rr)
+    end
+    -- corners: quarters of the cap (the right ones mirrored)
+    local cpos = { { 0, 0, 0, CAP_U, 0, 0.5 }, { W - CW, 0, CAP_U, 0, 0, 0.5 }, { 0, H - CH, 0, CAP_U, 0.5, 1 },
+        { W - CW, H - CH, CAP_U, 0, 0.5, 1 } }
+    for i = 1, 4 do
+        local c, t = cpos[i], s.c.corner[i]
+        t:SetTexture(cap)
+        t:SetVertexColor(unpack(tint))
+        t:SetTexCoord(c[3], c[4], c[5], c[6])
+        put(t, f, c[1], c[2], CW, CH)
+    end
+    -- sides: a thin slice from the middle of the cap, stretched
+    for i, t in ipairs({ s.c.left, s.c.right }) do
+        t:SetTexture(cap)
+        t:SetVertexColor(unpack(tint))
+        if i == 1 then t:SetTexCoord(0, CAP_U, 0.49, 0.51) else t:SetTexCoord(CAP_U, 0, 0.49, 0.51) end
+        put(t, f, i == 1 and 0 or W - CW, CH, CW, H - 2 * CH)
+    end
+    -- top and bottom: the bar's straight edges (top line from the upper half, bottom line from the lower)
+    local len = W - 2 * CW
+    local u = len * 2 / (256 * K)
+    s.c.top:SetTexture(ns.Tex("edge-bar-top" .. suffix), "REPEAT", "CLAMP")
+    s.c.top:SetTexCoord(0, u, 0, 0.5)
+    s.c.bottom:SetTexture(ns.Tex("edge-bar" .. suffix), "REPEAT", "CLAMP")
+    s.c.bottom:SetTexCoord(0, u, 0.5, 1)
+    for _, t in ipairs({ s.c.top, s.c.bottom }) do t:SetVertexColor(unpack(tint)) end
+    put(s.c.top, f, CW, 0, len, CH)
+    put(s.c.bottom, f, CW, H - CH, len, CH)
+end
+
+-- A small window with an empty text field; onAccept(text) when confirmed
+function UI.AskText(title, onAccept)
+    if not StaticPopupDialogs then return end
+    StaticPopupDialogs.FQP_ASK_TEXT = {
+        text = "%s", button1 = OKAY or "OK", button2 = CANCEL or "Cancel", hasEditBox = true, editBoxWidth = 360,
+        timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+        OnShow = function(self)
+            local box = (self.GetEditBox and self:GetEditBox()) or rawget(self, "editBox") or rawget(self, "EditBox")
+            if box then box:SetText(""); box:SetFocus() end
+        end,
+        OnAccept = function(self)
+            local box = (self.GetEditBox and self:GetEditBox()) or rawget(self, "editBox") or rawget(self, "EditBox")
+            onAccept(box and box:GetText() or "")
+        end,
+        EditBoxOnEnterPressed = function(box)
+            local parent = box:GetParent()
+            onAccept(box:GetText() or "")
+            parent:Hide()
+        end,
+        EditBoxOnEscapePressed = function(box) box:GetParent():Hide() end,
+    }
+    StaticPopup_Show("FQP_ASK_TEXT", title)
 end
 
 -- A small window with a link in a text field, selected, to copy with Ctrl+C (the game cannot open web pages).

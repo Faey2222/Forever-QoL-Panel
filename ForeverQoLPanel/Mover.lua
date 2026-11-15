@@ -259,7 +259,11 @@ function M:Toggle(on)
     if on and self.active then return end
     self.active = on and true or false
     if self.active then
-        if ns.Options and ns.Options.frame and ns.Options.frame:IsShown() then ns.Options.frame:Hide() end
+        -- started from the options: they come back when the move mode ends
+        if ns.Options and ns.Options.frame and ns.Options.frame:IsShown() then
+            self.reopenOptions = true
+            ns.Options.frame:Hide()
+        end
         self:UpdateBar()
         toolbar():Show()
     elseif bar then
@@ -272,6 +276,10 @@ function M:Toggle(on)
     end
     self:ShowItems()
     self:DrawGrid()
+    if not self.active and self.reopenOptions then
+        self.reopenOptions = false
+        if ns.Options and ns.Options.Open then ns.Options:Open() end
+    end
 end
 
 ns.OnLogin(function()

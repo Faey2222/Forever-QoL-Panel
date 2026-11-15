@@ -1,58 +1,88 @@
-"""Petopia Forever abilities page -> ForeverQoLPanel/BeastData.lua (which beast teaches which ability rank).
+"""Petopia Forever pages -> ForeverQoLPanel/BeastData.lua: which beast teaches which pet ability rank, which families
+can learn each ability, and the family of every tameable beast Petopia lists.
 
-Usage: python tools/petopia.py            (downloads https://www.wow-petopia.com/forever/abilities.php)
-       python tools/petopia.py page.html  (uses a saved copy)
+Usage: python tools/petopia.py                          (downloads the pages)
+       python tools/petopia.py abilities.html speed.html  (uses saved copies of abilities.php and attackspeed.php)
 The data is Petopia's (Warcraft Hunters Union); the addon names it in its options.
 """
 import re, html, sys, pathlib, urllib.request
 here = pathlib.Path(__file__).parent
-if len(sys.argv) > 1:
-    t = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8", errors="ignore")
-else:
-    req = urllib.request.Request("https://www.wow-petopia.com/forever/abilities.php", headers={"User-Agent": "Mozilla/5.0"})
-    t = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", errors="ignore")
+BASE = "https://www.wow-petopia.com/forever/"
 
-# ability headings: id, icon, name
-abilities = {}
-for m in re.finditer(r"<h3 class='guide_heading[^']*' id='([^']+)'><img[^>]*src='/images/icons/([^'.]+)\.png'>([^<]+)</h3>", t):
+def page(i, name):
+    if len(sys.argv) > i:
+        return pathlib.Path(sys.argv[i]).read_text(encoding="utf-8", errors="ignore")
+    req = urllib.request.Request(BASE + name, headers={"User-Agent": "Mozilla/5.0"})
+    return urllib.request.urlopen(req, timeout=30).read().decode("utf-8", errors="ignore")
+
+t = page(1, "abilities.php")
+speed = page(2, "attackspeed.php")
+
+# Family keys as Petopia writes them, and the creature family ids of the game (Wowhead's Forever data; wolf, spider and
+# core hound are the original game's ids, Wowhead's search does not find them)
+FAMILY = {"Wolf": "wolf", "Cat": "cat", "Spider": "spider", "Bear": "bear", "Boar": "boar", "Crocolisk": "crocolisk",
+          "Carrion Bird": "carrionbird", "Crab": "crab", "Gorilla": "gorilla", "Raptor": "raptor",
+          "Tallstrider": "tallstrider", "Scorpid": "scorpid", "Turtle": "turtle", "Bat": "bat", "Hyena": "hyena",
+          "Bird of Prey": "birdofprey", "Wind Serpent": "windserpent", "Core Hound": "corehound", "Fox": "fox"}
+FAMILY_ID = {"wolf": 1, "cat": 2, "spider": 3, "bear": 4, "boar": 5, "crocolisk": 6, "carrionbird": 7, "crab": 8,
+             "gorilla": 9, "raptor": 11, "tallstrider": 12, "scorpid": 20, "turtle": 21, "bat": 24, "hyena": 25,
+             "birdofprey": 26, "windserpent": 27, "corehound": 45, "fox": 319}
+
+# ability headings: id, icon, name; and the families that can learn it
+abilities, families = {}, {}
+for m in re.finditer(r"<h3 class='guide_heading[^']*' id='([^']+)'><img[^>]*src='/images/icons/([^'.]+)\.png'>([^<]+)</h3>(.*?)(?=<h3 class='guide_heading|$)", t, flags=re.S):
     abilities[m.group(1)] = {"icon": m.group(2), "name": html.unescape(m.group(3)).strip()}
+    span = re.search(r"<span class='ability_family_list (?:classic|forever)[^']*'>(.*?)</span>", m.group(4), flags=re.S)
+    families[m.group(1)] = re.findall(r"family\.php\?id=([a-z]+)'", span.group(1)) if span else []
 
-npcs = {}       # id -> list of (key, rank)
-info = {}       # id -> (name, family, level, zone)
-ranks = {}      # key -> {rank: pet level}
+npcs, npcFamily, ranks = {}, {}, {}
+NPC = r"npc=(\d+)'>([^<]+)</a> \(([^,]+), ([^,]+), ([^)]*\)?)\)"
 for m in re.finditer(r"<li id='([^']+?)(\d+)' class='abilityrank[^']*'>(.*?)</li>\s*(?=<li id='|</ul>\s*<hr|</ul>\s*$)", t, flags=re.S):
     key, rank, body = m.group(1), int(m.group(2)), m.group(3)
     if key not in abilities:
         continue
     lvl = re.search(r"Pet Level (\d+)", body)
     ranks.setdefault(key, {})[rank] = int(lvl.group(1)) if lvl else 0
-    for n in re.finditer(r"npc=(\d+)'>([^<]+)</a> \(([^,]+), ([^,]+), ([^)]*\)?)\)", body):
+    for n in re.finditer(NPC, body):
         nid = int(n.group(1))
         npcs.setdefault(nid, [])
         if (key, rank) not in npcs[nid]:
             npcs[nid].append((key, rank))
-        info[nid] = (html.unescape(n.group(2)), n.group(3), n.group(4), html.unescape(n.group(5)))
+        if n.group(3) in FAMILY: npcFamily[nid] = FAMILY[n.group(3)]
+for n in re.finditer(NPC, speed):
+    if n.group(3) in FAMILY: npcFamily[int(n.group(1))] = FAMILY[n.group(3)]
 
 taught = {k for v in npcs.values() for k, _ in v}
+unknown = {f for k in taught for f in families[k] if f not in FAMILY_ID}
 print(len(abilities), "abilities,", len(taught), "taught by beasts,", len(npcs), "beasts,",
-      sum(len(v) for v in npcs.values()), "entries")
-for k in sorted(taught):
-    print(" ", k, abilities[k]["name"], abilities[k]["icon"], "ranks", sorted(ranks.get(k, {})))
+      sum(len(v) for v in npcs.values()), "entries,", len(npcFamily), "beast families", "unknown families:", unknown or "none")
 
 def lua(s): return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 out = ["local _, ns = ...", "",
-       "-- Which tameable beast teaches which pet ability rank in WoW: Forever.",
-       "-- Data: Petopia (wow-petopia.com/forever), the hunter pet guide by the Warcraft Hunters Union. Generated by",
-       "-- tools/petopia.py; the options name the source.",
-       "ns.BeastData = {", "    -- key = { English name, icon file, { [rank] = pet level } }", "    abilities = {"]
+       "-- Which tameable beast teaches which pet ability rank in WoW: Forever, which families can learn it, and the",
+       "-- family of every tameable beast. Data: Petopia (wow-petopia.com/forever), the hunter pet guide by the Warcraft",
+       "-- Hunters Union. Generated by tools/petopia.py; the options name the source.",
+       "ns.BeastData = {",
+       "    -- key = { English name, icon file, { [rank] = pet level }, { families that can learn it } }",
+       "    abilities = {"]
 for k in sorted(taught):
     a = abilities[k]
     rl = ", ".join(f"[{r}] = {l}" for r, l in sorted(ranks[k].items()))
-    out.append(f"        [{lua(k)}] = {{ {lua(a['name'])}, {lua(a['icon'])}, {{ {rl} }} }},")
+    fl = ", ".join(lua(f) for f in families[k])
+    out.append(f"        [{lua(k)}] = {{ {lua(a['name'])}, {lua(a['icon'])}, {{ {rl} }}, {{ {fl} }} }},")
+out += ["    },", "    -- family key = creature family id of the game", "    familyIds = {"]
+out += [f"        [{lua(f)}] = {i}," for f, i in sorted(FAMILY_ID.items())]
 out += ["    },", "    -- npc id = { ability key, rank, ... }", "    npcs = {"]
 for nid in sorted(npcs):
     pairs = ", ".join(f"{lua(k)}, {r}" for k, r in npcs[nid])
     out.append(f"        [{nid}] = {{ {pairs} }},")
+out += ["    },", "    -- npc id = family key (to learn the family names in the client's language)", "    npcFamily = {"]
+row = []
+for nid in sorted(npcFamily):
+    row.append(f"[{nid}] = {lua(npcFamily[nid])}")
+    if len(row) == 6:
+        out.append("        " + ", ".join(row) + ","); row = []
+if row: out.append("        " + ", ".join(row) + ",")
 out += ["    },", "}", ""]
 target = here.parent / "ForeverQoLPanel" / "BeastData.lua"
 target.write_text("\n".join(out), encoding="utf-8")

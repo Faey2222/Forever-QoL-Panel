@@ -439,6 +439,42 @@ function G:LootMessage(msg)
     end
 end
 
+-- Loot sparkle ---------------------------------------------------------------------
+-- The game can make quest items in the world sparkle itself (a client setting); graphics presets switch it off.
+-- Kept on: at login, a moment later (account settings may arrive late) and after every graphics change; in combat
+-- it waits. Switching it off only takes effect after a game restart, which the chat says.
+local SPARKLE = "outlineModeShowLootEffectWhenDisabled"
+local GRAPHICS = { graphicsquality = true, raidgraphicsquality = true, [SPARKLE:lower()] = true }
+
+local function getCVar(name)
+    if C_CVar and C_CVar.GetCVar then return C_CVar.GetCVar(name) end
+    return GetCVar and GetCVar(name)
+end
+local function setCVar(name, value)
+    if C_CVar and C_CVar.SetCVar then return pcall(C_CVar.SetCVar, name, value) end
+    if SetCVar then return pcall(SetCVar, name, value) end
+end
+
+function G:Sparkle()
+    if not on("lootSparkle") then return end
+    if InCombatLockdown() then self.sparklePending = true return end
+    local v = getCVar(SPARKLE)
+    if v ~= nil and v ~= "1" then
+        self.settingSparkle = true
+        setCVar(SPARKLE, "1")
+        self.settingSparkle = false
+    end
+    ns.Debug.Set("lootSparkle", { before = v, now = getCVar(SPARKLE) })
+end
+
+-- the option was switched; the game shows the change only after a restart: the options window says so when it
+-- closes, from elsewhere the chat does
+function G:SparkleChanged()
+    if on("lootSparkle") then self:Sparkle() elseif getCVar(SPARKLE) == "1" then setCVar(SPARKLE, "0") end
+    if ns.Options and ns.Options.frame and ns.Options.frame:IsShown() then ns.Options.pendingRestart = true
+    else say(ns.L.GP_SPARKLE_OFF) end
+end
+
 ns.OnLogin(function()
     for _, ev in ipairs({ "GOSSIP_SHOW", "QUEST_GREETING", "QUEST_DETAIL", "QUEST_ACCEPT_CONFIRM", "QUEST_PROGRESS",
         "QUEST_COMPLETE" }) do
@@ -459,4 +495,12 @@ ns.OnLogin(function()
     ns.On("CHAT_MSG_LOOT", function(_, msg) ns.Debug.Call("Loot", G.LootMessage, G, msg) end)
     ns.On("CHAT_MSG_MONEY", function(_, msg) ns.Debug.Call("Loot", G.MoneyMessage, G, msg) end)
     ns.On("PLAYER_REGEN_DISABLED", function() if G.moving then G:SetLootMoving(false) end end)
+    G:Sparkle()
+    C_Timer.After(5, function() G:Sparkle() end)
+    ns.On("PLAYER_REGEN_ENABLED", function() if G.sparklePending then G.sparklePending = false; G:Sparkle() end end)
+    ns.On("CVAR_UPDATE", function(_, name)
+        if not G.settingSparkle and type(name) == "string" and GRAPHICS[name:lower()] then
+            C_Timer.After(1, function() G:Sparkle() end)
+        end
+    end)
 end)

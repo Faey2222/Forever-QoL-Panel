@@ -206,6 +206,41 @@ local function abilityName(key)
     return ns.BeastData.abilities[key][1]
 end
 
+-- Family names in the client's language -> Petopia's family key: the game's own names by family id where the client
+-- can tell them, names learned from beasts you hover (Petopia knows each beast's family), English as written.
+local familyMap
+local function famNorm(s) return s and tostring(s):lower():gsub("[%s%-']", "") end
+local function familyKey(name)
+    if not name or ns.Secret(name) then return nil end
+    if not familyMap then
+        familyMap = {}
+        for key, id in pairs(ns.BeastData.familyIds) do
+            familyMap[key] = key
+            local CI = C_CreatureInfo
+            local info = CI and CI.GetCreatureFamilyInfo and CI.GetCreatureFamilyInfo(id)
+            if type(info) == "table" and info.name then familyMap[famNorm(info.name)] = key end
+        end
+    end
+    local n = famNorm(name)
+    local learned = ns.db.beasts and ns.db.beasts.families
+    return familyMap[n] or (learned and learned[n])
+end
+
+-- Can your pet learn it? "yes", "level" (with the pet level it needs), "no", or nil (no pet, family unknown)
+local function petCan(key, rank)
+    if not (UnitExists and UnitExists("pet")) then return nil end
+    local fam = familyKey(UnitCreatureFamily and UnitCreatureFamily("pet"))
+    if not fam then return nil end
+    local a = ns.BeastData.abilities[key]
+    local can = false
+    for _, f in ipairs(a[4] or {}) do if f == fam then can = true end end
+    if not can then return "no" end
+    local need = a[3][rank] or 0
+    local lvl = UnitLevel("pet") or 0
+    if lvl > 0 and lvl < need then return "level", need end
+    return "yes"
+end
+
 -- npc id from the unit's GUID ("Creature-0-...-<id>-...")
 local function npcID(unit)
     local guid = UnitGUID(unit)
@@ -225,6 +260,13 @@ function B:Unit(tt)
     tt.fqpBeast = true
     local id = npcID(unit)
     local teaches = id and ns.BeastData.npcs[id]
+    -- learn the family's name in the client's language from this beast
+    local fam = id and ns.BeastData.npcFamily[id]
+    if fam then
+        ns.db.beasts = ns.db.beasts or { known = {}, names = {} }
+        ns.db.beasts.families = ns.db.beasts.families or {}
+        ns.db.beasts.families[famNorm(family)] = fam
+    end
     -- our lines, collected first: a small gap separates them from the game's own lines
     local lines = {}
     if teaches then
@@ -239,6 +281,16 @@ function B:Unit(tt)
                     lines[#lines + 1] = { text .. "  |cff9d9d9d(" .. L().BEAST_KNOWN .. ")|r", 0.62, 0.62, 0.62 }
                 else
                     lines[#lines + 1] = { text .. "  |cff20ff20(" .. L().BEAST_NEW .. ")|r", 0.12, 1, 0 }
+                end
+                -- and whether your pet can learn it
+                local can, need = petCan(key, rank)
+                local petFam = can and UnitCreatureFamily("pet")
+                if can == "yes" then
+                    lines[#lines + 1] = { "   " .. L().BEAST_PET_YES:format(petFam), 0.12, 1, 0 }
+                elseif can == "level" then
+                    lines[#lines + 1] = { "   " .. L().BEAST_PET_LEVEL:format(petFam, need), 1, 0.5, 0.25 }
+                elseif can == "no" then
+                    lines[#lines + 1] = { "   " .. L().BEAST_PET_NO:format(petFam), 1, 0.25, 0.25 }
                 end
             end
         end

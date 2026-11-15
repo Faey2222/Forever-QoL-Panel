@@ -29,6 +29,9 @@ Every feature can be switched off on its own. Open the options with `/fqp`, the 
 - Which beast teaches which hunter pet ability (`ForeverQoLPanel/BeastData.lua`) comes from
   [Petopia](https://www.wow-petopia.com/forever/) by the Warcraft Hunters Union and is not covered by the license; the
   options name the source. `tools/petopia.py` rebuilds the table.
+- The loot optimizer's default stat weights (`ForeverQoLPanel/WeightData.lua`) come from
+  [Pawn Forever](https://github.com/turlockmike/pawn-forever) by turlockmike (MIT license, its notice is in that file).
+  `tools/pawn_weights.py` rebuilds the table.
 - World of Warcraft, Warcraft and Blizzard Entertainment are trademarks or registered trademarks of
   Blizzard Entertainment, Inc. This project is a fan-made addon and is not affiliated with or endorsed by Blizzard.
 

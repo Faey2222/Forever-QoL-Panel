@@ -15,6 +15,7 @@ local function items() return ns.db.panel.items end
 local function tt() return ns.db.tooltip end
 local function np() return ns.db.nameplates end
 local function mm() return ns.db.minimap end
+local function lo() return ns.db.lootopt end
 
 -- page: id, since (version that brought it), title, text, controls
 -- control: { "check", label, tbl, key } or { "choice", label, tbl, key, { { value, label }, ... } }
@@ -88,6 +89,27 @@ local PAGES = {
         { "slider", "OPT_WARN_AMMO_MIN", wn, "ammoMin", min = 100, max = 800, step = 50, class = "HUNTER" },
         { "check", "ITEM_shards", items, "shards", class = "WARLOCK" },
         { "check", "OPT_WARN_RESTING", wn, "hideResting" },
+    } },
+    { id = "repbar", icon = "Interface\\Icons\\INV_Misc_Note_02", since = "1.2.0", title = "SEC_REP", text = "WZ_REP_TEXT", controls = {
+        { "check", "OPT_REPBAR", panel, "repBar" },
+        { "choice", "OPT_REP_PLACE", panel, "repPlace", { { "attach", "REP_ATTACH" }, { "below", "REP_BELOW" }, { "free", "PLACE_FREE" } } },
+        { "choice", "OPT_XP_PLACE", panel, "xpPlace", { { "panel", "PLACE_PANEL" }, { "free", "PLACE_FREE" } } },
+        { "check", "OPT_GP_MAILALTS", gp, "mailAlts" },
+    } },
+    { id = "beasts", icon = "Interface\\Icons\\Ability_Hunter_BeastTaming", since = "1.3.0", title = "WZ_BEASTS", text = "WZ_BEASTS_TEXT", controls = {
+        { "check", "OPT_TT_BEASTS", tt, "beasts", class = "HUNTER" },
+    } },
+    { id = "lootopt", icon = "Interface\\Icons\\INV_Misc_Bag_10_Blue", since = "1.4.0", title = "SEC_LOOTOPT", text = "WZ_LOOTOPT_TEXT", controls = {
+        { "check", "SEC_LOOTOPT", lo, "enabled" },
+        { "check", "OPT_LO_TOOLTIP", lo, "tooltip" },
+        { "check", "OPT_LO_UPGRADE", lo, "upgrade" },
+        { "check", "OPT_LO_FULL", lo, "bagsFull" },
+    } },
+    { id = "sparkle", icon = "Interface\\Icons\\INV_Enchant_ShardBrilliantSmall", since = "1.4.0", title = "OPT_GP_SPARKLE", text = "WZ_SPARKLE_TEXT", controls = {
+        { "check", "OPT_GP_SPARKLE", gp, "lootSparkle" },
+    } },
+    { id = "beastpet", icon = "Interface\\Icons\\Ability_Hunter_BeastTraining", since = "1.4.0", title = "WZ_BEASTPET", text = "WZ_BEASTPET_TEXT", controls = {
+        { "check", "OPT_TT_BEASTS", tt, "beasts", class = "HUNTER" },
     } },
 }
 
@@ -280,6 +302,23 @@ function Wz:Open(all)
         if all or not from or newer(p.since, from) then self.pages[#self.pages + 1] = p end
     end
     if #self.pages == 1 then return self:Finish() end
+    self.frame = self.frame or createWindow()
+    if ns.Options and ns.Options.frame then ns.Options.frame:Hide() end
+    self.index, self.seen = 1, {}
+    self:Render()
+    self.frame:Show()
+end
+
+-- What's new (from the options): the pages of the newest version that brought any, as after an update
+function Wz:OpenNews()
+    local latest, previous
+    for _, p in ipairs(PAGES) do if not latest or newer(p.since, latest) then latest = p.since end end
+    for _, p in ipairs(PAGES) do
+        if newer(latest, p.since) and (not previous or newer(p.since, previous)) then previous = p.since end
+    end
+    self.update, self.from = true, previous or "0"
+    self.pages = { OVERVIEW }
+    for _, p in ipairs(PAGES) do if p.since == latest then self.pages[#self.pages + 1] = p end end
     self.frame = self.frame or createWindow()
     if ns.Options and ns.Options.frame then ns.Options.frame:Hide() end
     self.index, self.seen = 1, {}
