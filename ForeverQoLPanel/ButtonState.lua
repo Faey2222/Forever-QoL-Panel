@@ -39,9 +39,13 @@ function BS:Tint(b)
         return
     end
     local a = actionOf(b)
-    if not a or not (HasAction and HasAction(a)) then return end
+    if not a or not HasAction then return end
+    local has = HasAction(a)
+    if ns.Secret(has) or not has then return end
     local usable, noMana = IsUsableAction(a)
     local inRange = IsActionInRange and IsActionInRange(a)
+    -- values the game keeps secret (in combat) cannot be compared: the button keeps the game's own colour then
+    if ns.Secret(usable) or ns.Secret(noMana) or ns.Secret(inRange) then return end
     local c = WHITE
     if inRange == false or inRange == 0 then c = d.colors.range
     elseif noMana then c = d.colors.mana
@@ -83,10 +87,30 @@ local function format(remain, d)
 end
 BS.Format = format
 
+-- Cooldowns the game keeps secret (in combat) cannot be counted by an addon: the game's own countdown numbers show
+-- then (they can), in our font, size, outline, shadow and the colour for seconds
+function BS:GameNumbers(b)
+    local d = db()
+    local cd = cooldownOf(b)
+    if not cd then return end
+    if cd.SetHideCountdownNumbers then cd:SetHideCountdownNumbers(not d.cd) end
+    local fs = cd.GetCountdownFontString and cd:GetCountdownFontString()
+    if fs and fs.SetFont then
+        fs:SetFont(ns.FontFile(), d.cdSize or 16, d.cdOutline == "none" and "" or (d.cdOutline or "OUTLINE"))
+        if d.cdShadow then fs:SetShadowOffset(1, -1); fs:SetShadowColor(0, 0, 0, 1) else fs:SetShadowOffset(0, 0) end
+        local c = d.cdColors.mid
+        fs:SetTextColor(c[1], c[2], c[3])
+    end
+end
+
 function BS:Count(b, now)
     local d = db()
     local holder = b.fqpCD
     local cd = cooldownOf(b)
+    if b.fqpSecret then
+        if holder then holder.text:SetText("") end
+        return
+    end
     if not d.cd or not b.fqpStart then
         if holder then holder.text:SetText("") end
         return
@@ -111,6 +135,13 @@ local function watch(b)
     if not cd or b.fqpWatched then return end
     b.fqpWatched = true
     hooksecurefunc(cd, "SetCooldown", function(_, start, duration)
+        -- secret values must not be compared or calculated with
+        if ns.Secret(start) or ns.Secret(duration) then
+            b.fqpStart, b.fqpSecret = nil, true
+            BS:GameNumbers(b)
+            return
+        end
+        b.fqpSecret = nil
         if start and duration and duration > 0 then b.fqpStart, b.fqpDur = start, duration
         else b.fqpStart = nil end
     end)
@@ -169,6 +200,7 @@ function BS:Refresh()
         if b.fqpCD or db().cd then self:StyleText(b) end
         local cd = cooldownOf(b)
         if cd and cd.SetHideCountdownNumbers and not db().cd then cd:SetHideCountdownNumbers(false) end
+        if b.fqpSecret then self:GameNumbers(b) end
     end
 end
 

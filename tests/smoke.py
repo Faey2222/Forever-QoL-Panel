@@ -381,6 +381,18 @@ def main() -> int:
             assert(BS.Format(12.4, ForeverQoLPanelDB.buttons) == "12" and BS.Format(90, ForeverQoLPanelDB.buttons) == "2m", "cooldown format")
             b.fqpStart, b.fqpDur = 100, 1.5
             BS:Count(b, 100.5)
+            -- in combat the game keeps cooldowns and states secret: nothing compared, the game shows its own numbers
+            local S1, S2 = {}, {}
+            MOCK_secret[S1], MOCK_secret[S2] = true, true
+            b.cooldown:SetCooldown(S1, S2)
+            assert(b.fqpSecret and not b.fqpStart, "secret cooldown not set aside")
+            BS:Count(b, 120)
+            IsActionInRange = function() return S1 end
+            BS:Tint(b)
+            b.cooldown:SetCooldown(100, 30)
+            assert(not b.fqpSecret and b.fqpStart == 100, "plain cooldown after a secret one")
+            MOCK_secret[S1], MOCK_secret[S2] = nil, nil
+            IsActionInRange = function() return false end
             ForeverQoLPanelDB.buttons.range = false; BS:Refresh(); ForeverQoLPanelDB.buttons.range = true
             HasAction, IsUsableAction, IsActionInRange = nil, nil, nil
         end

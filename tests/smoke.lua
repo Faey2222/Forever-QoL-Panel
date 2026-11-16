@@ -53,7 +53,14 @@ MOCK_RegisterEvent = function(self, ev) handlers[ev] = self end
 UIParent = obj("Frame")
 GetCursorPosition = function() return 520, 380 end
 Minimap = obj("Minimap")
-function hooksecurefunc() end
+-- like the game: runs fn after the original (on a table method or a global function)
+function hooksecurefunc(a, b, c)
+    local tbl, name, fn = a, b, c
+    if type(a) == "string" then tbl, name, fn = _G, a, b end
+    local orig = tbl[name]
+    if type(orig) ~= "function" then return end
+    rawset(tbl, name, function(...) local r = { orig(...) }; fn(...); return unpack(r) end)
+end
 function GetBuildInfo() return "1.60.1", "70245", "", 16001 end
 GameTooltip = obj("GameTooltip")
 GameFontHighlight = obj("Font")
