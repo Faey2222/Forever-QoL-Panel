@@ -21,7 +21,7 @@ font:SetShadowOffset(1, -1)
 font:SetShadowColor(0, 0, 0, 1)
 
 function E.ApplyFont()
-    font:SetFont(ns.FontFile(), 12, "")
+    font:SetFont(ns.FontFile(), math.max(8, math.min(18, ns.db.panel.fontSize or 12)), "")
 end
 
 local function money(c, plain)
@@ -744,7 +744,8 @@ end
 
 E.ShowTip = showTip
 
--- a cell that asks for attention (new mail): pulsing glow, steady glow with fewer animations
+-- a cell that asks for attention (new mail), effect from the settings (noticeEffect): "pulse" (glow coming and going),
+-- "glow" (steady), "blink", "icon" (the icon grows and shrinks), "none"; with fewer animations a steady glow
 local function pulse(c, on)
     if not c.pulseGlow then
         c.pulseGlow = c:CreateTexture(nil, "BACKGROUND", nil, 2)
@@ -760,9 +761,15 @@ local function pulse(c, on)
         c.pulsing = false
         return
     end
-    if c.pulsing then return end
-    c.pulsing = true
-    if ns.Motion() ~= "full" then
+    local style = ns.db.panel.noticeEffect or "pulse"
+    if c.pulsing == style then return end
+    c.pulsing = style
+    c:SetScript("OnUpdate", nil)
+    c.pulseGlow:SetAlpha(0)
+    if c.icon then c.icon:SetSize(ICON, ICON) end
+    if c.ringSize and c.ring then c.ring:SetSize(c.ringSize, c.ringSize) end
+    if style == "none" then return end
+    if style == "glow" or ns.Motion() ~= "full" then
         c.pulseGlow:SetAlpha(0.35)
         return
     end
@@ -770,7 +777,15 @@ local function pulse(c, on)
     c:SetScript("OnUpdate", function(self, elapsed)
         t = t + elapsed
         local wave = 0.5 - 0.5 * math.cos(2 * math.pi * t / 1.6)
-        self.pulseGlow:SetAlpha(0.1 + 0.5 * wave)
+        if style == "blink" then
+            self.pulseGlow:SetAlpha((t % 1) < 0.5 and 0.55 or 0)
+        elseif style == "icon" then
+            local k = 1 + 0.18 * wave
+            self.icon:SetSize(ICON * k, ICON * k)
+            if self.ringSize and self.ring then self.ring:SetSize(self.ringSize * k, self.ringSize * k) end
+        else
+            self.pulseGlow:SetAlpha(0.1 + 0.5 * wave)
+        end
     end)
 end
 
@@ -1101,6 +1116,8 @@ end
 -- Places the visible cells left to right and returns the panel width (whole units, so the border stays seamless).
 function E:Layout()
     local p = ns.db.panel
+    BH = math.max(20, math.min(40, p.height or 26))
+    if self.pin then self.pin:SetHeight(BH) end
     local pad, x, first = p.pad, side(), true
     for _, key in ipairs(p.order) do
         local c, d = self.cells[key], self.defs[key]
@@ -1109,7 +1126,7 @@ function E:Layout()
             local w = pad * 2 + ICON + GAP + tw
             c:ClearAllPoints()
             c:SetPoint("TOPLEFT", self.band, "TOPLEFT", x, 0)
-            c:SetWidth(w)
+            c:SetSize(w, BH)
             c.icon:ClearAllPoints()
             c.icon:SetPoint("CENTER", c, "LEFT", pad + ICON / 2, 0)
             c.clip:ClearAllPoints()

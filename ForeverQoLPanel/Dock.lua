@@ -29,6 +29,14 @@ local PIECES = { "capL", "capR", "thinB", "thinT", "rcapL", "rcapR", "rthinB", "
 
 -- modern skin: flat, a thin border, square or round corners
 local MPH, MBAR, MSIDE = BH + 2, 10, 12        -- panel height, bar height, side room
+-- the panel's height (setting height, 20-40): content, line and modern panel follow it
+local function syncHeight()
+    BH = math.max(20, math.min(40, ns.db.panel.height or 26))
+    YP, MPH = BH + 5, BH + 2
+    if Dock.band then Dock.band:SetHeight(BH) end
+end
+-- the classic caps are drawn for the default height: stretched so their line meets the panel's line
+local function capScale() return (YP - CAP_Y) / (31 - CAP_Y) end
 local MFILL = { 0.05, 0.05, 0.06, 0.88 }
 local MBORDER = { bronze = { 0.52, 0.4, 0.24, 1 }, silver = { 0.56, 0.56, 0.6, 1 }, dark = { 0, 0, 0, 1 } }
 local RIM_TINT = { bronze = { 1, 1, 1 }, silver = { 1, 1, 1 }, dark = { 0.42, 0.42, 0.42 } }
@@ -217,6 +225,7 @@ function Dock:Relayout()
 end
 
 function Dock:Layout(W)
+    syncHeight()
     if self:Modern() then return self:LayoutModern(W) end
     boxHide(self.mPanel)
     local p = ns.db.panel
@@ -237,12 +246,13 @@ function Dock:Layout(W)
     self.band:ClearAllPoints()
     self.band:SetPoint(bottom() and "BOTTOMLEFT" or "TOPLEFT")
 
-    put(self.fillL, CAP_X, CAP_Y, CAP_W, CAP_H); tc(self.fillL, 0, CAP_U, 0, CAP_V)
-    put(self.fillR, W - 96, CAP_Y, CAP_W, CAP_H); tc(self.fillR, CAP_U, 0, 0, CAP_V)
+    local capH = CAP_H * capScale()
+    put(self.fillL, CAP_X, CAP_Y, CAP_W, capH); tc(self.fillL, 0, CAP_U, 0, CAP_V)
+    put(self.fillR, W - 96, CAP_Y, CAP_W, capH); tc(self.fillR, CAP_U, 0, 0, CAP_V)
     put(self.fillM, 96, CAP_Y, W - 192, YP - CAP_Y)
 
-    put(self.capL, CAP_X, CAP_Y, CAP_W, CAP_H); tc(self.capL, 0, CAP_U, 0, CAP_V)
-    put(self.capR, W - 96, CAP_Y, CAP_W, CAP_H); tc(self.capR, CAP_U, 0, 0, CAP_V)
+    put(self.capL, CAP_X, CAP_Y, CAP_W, capH); tc(self.capL, 0, CAP_U, 0, CAP_V)
+    put(self.capR, W - 96, CAP_Y, CAP_W, capH); tc(self.capR, CAP_U, 0, 0, CAP_V)
     local width = WIDTH[p.border or 2] or WIDTH[2]
     put(self.edge, 96, YP - width.c, W - 192, width.h); tc(self.edge, 0, (W - 192) * 2 / 256, 0, width.v)
 

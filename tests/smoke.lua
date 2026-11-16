@@ -12,7 +12,15 @@ function obj(kind)
 end
 MOCK_GetFrameLevel = function() return 1 end
 MOCK_CreateTexture = function() return obj("Texture") end
-MOCK_CreateFontString = function() return obj("FontString") end
+-- like the game: a font string needs a font (template, font object or SetFont) before it takes text
+MOCK_CreateFontString = function(_, _, _, template) local o = obj("FontString"); o._font = template ~= nil; return o end
+MOCK_SetFont = function(self) self._font = true end
+MOCK_SetFontObject = function(self) self._font = true end
+MOCK_SetText = function(self, t)
+    if self.kind == "FontString" and not self._font then error("FontString:SetText(): Font not set", 2) end
+    self._text = t
+end
+MOCK_GetText = function(self) return self._text end
 MOCK_CreateMaskTexture = function() return obj("Mask") end
 MOCK_CreateAnimationGroup = function() return obj("AnimGroup") end
 MOCK_CreateAnimation = function() return obj("Anim") end

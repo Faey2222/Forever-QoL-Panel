@@ -35,6 +35,8 @@ UI.NEED = {
     food = { function() return ns.db.warnings.food end, "OPT_WARN_FOOD" },
     xptext = { function() return ns.db.panel.xpText end, "OPT_XPTEXT" },
     lootopt = { function() return ns.db.lootopt.enabled end, "SEC_LOOTOPT" },
+    btnrange = { function() return ns.db.buttons.range end, "OPT_BTN_RANGE" },
+    btncd = { function() return ns.db.buttons.cd end, "OPT_BTN_CD" },
     repbar = { function() return ns.db.panel.enabled and ns.db.panel.repBar end, "OPT_REPBAR" },
     repfree = { function() return ns.db.panel.repPlace == "free" end, "PLACE_FREE" },
     xpfree = { function() return ns.db.panel.xpPlace == "free" end, "PLACE_FREE" },
@@ -754,6 +756,76 @@ function MAKE.slider(f)
     return w
 end
 
+-- a preview of action buttons (the Action buttons page): example buttons drawn with the current settings
+local PREVIEW = { { state = "normal", label = "BTN_PREV_NORMAL" }, { state = "range", label = "BTN_COL_RANGE" },
+    { state = "mana", label = "BTN_PREV_MANA" }, { state = "unusable", label = "BTN_COL_UNUSABLE" },
+    { cd = 95, label = "BTN_PREV_LONG" }, { cd = 14, label = "BTN_PREV_MID" }, { cd = 3.4, label = "BTN_PREV_SHORT" } }
+UI.PREVIEW = PREVIEW
+function MAKE.buttonpreview(f)
+    local w = newCard(f)
+    w.slots = {}
+    for i, def in ipairs(PREVIEW) do
+        local b = CreateFrame("Frame", nil, w)
+        b:SetSize(40, 40)
+        b.icon = b:CreateTexture(nil, "ARTWORK")
+        b.icon:SetAllPoints()
+        b.icon:SetTexture("Interface\\Icons\\Spell_Nature_Lightning")
+        b.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        b.border = b:CreateTexture(nil, "OVERLAY")
+        b.border:SetTexture("Interface\\Buttons\\UI-Quickslot2")
+        b.border:SetPoint("CENTER")
+        b.border:SetSize(66, 66)
+        b.shade = b:CreateTexture(nil, "ARTWORK", nil, 2)
+        b.shade:SetAllPoints()
+        b.shade:SetColorTexture(0, 0, 0, 0.6)
+        -- a font from the start: the slots without a cooldown only ever clear this text
+        b.text = b:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        b.text:SetPoint("CENTER")
+        b.label = b:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        b.label:SetPoint("TOP", b, "BOTTOM", 0, -6)
+        b.label:SetWidth(90)
+        b.def = def
+        w.slots[i] = b
+    end
+    return w
+end
+
+-- a colour: a swatch on the right, a click opens the game's colour picker
+function MAKE.color(f)
+    local w = newRow(f)
+    w.swatch = CreateFrame("Button", nil, w, "BackdropTemplate")
+    w.swatch:SetSize(34, 20)
+    w.swatch:SetPoint("RIGHT", -6, 0)
+    if w.swatch.SetBackdrop then
+        w.swatch:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+        w.swatch:SetBackdropBorderColor(0.7, 0.6, 0.4, 1)
+    end
+    w.swatch.fill = w.swatch:CreateTexture(nil, "ARTWORK")
+    w.swatch.fill:SetPoint("TOPLEFT", 2, -2)
+    w.swatch.fill:SetPoint("BOTTOMRIGHT", -2, 2)
+    hookTip(w.swatch, w)
+    return w
+end
+
+-- the game's colour picker for a colour { r, g, b }; onChange(r, g, b) while picking and on cancel
+function UI.PickColor(c, onChange)
+    local CPF = ColorPickerFrame
+    if not CPF then return end
+    local r, g, b = c[1], c[2], c[3]
+    if CPF.SetupColorPickerAndShow then
+        CPF:SetupColorPickerAndShow({ r = r, g = g, b = b, hasOpacity = false,
+            swatchFunc = function() onChange(CPF:GetColorRGB()) end,
+            cancelFunc = function() onChange(r, g, b) end })
+    else
+        CPF.hasOpacity = false
+        CPF.func = function() onChange(CPF:GetColorRGB()) end
+        CPF.cancelFunc = function() onChange(r, g, b) end
+        CPF:SetColorRGB(r, g, b)
+        CPF.previousValues = { r, g, b }
+        if ShowUIPanel then ShowUIPanel(CPF) else CPF:Show() end
+    end
+end
+
 function MAKE.button(f)
     local w = newRow(f)
     w.buttons = {}
@@ -826,6 +898,18 @@ function Window:Render(specs, onChange)
                 end
             end
             y = y + math.ceil(n / cols) * (TILE_H + 12) + 4
+        elseif s.type == "buttonpreview" then
+            closeCard()
+            local w = take(f, "buttonpreview", function() return MAKE.buttonpreview(f) end)
+            w:SetSize(width, 96)
+            w:SetPoint("TOPLEFT", 0, -y)
+            local stepX = width / #w.slots
+            for i, b in ipairs(w.slots) do
+                b:ClearAllPoints()
+                b:SetPoint("TOP", w, "TOPLEFT", stepX * (i - 0.5), -14)
+            end
+            if ns.ButtonState then ns.ButtonState:Preview(w) end
+            y = y + 96 + GAP
         elseif s.type == "text" then
             closeCard()
             local w = take(f, "text", function() return MAKE.text(f) end)
@@ -900,6 +984,20 @@ function Window:Render(specs, onChange)
                     w.busy = false
                     controlW = 252
                 end
+            elseif s.type == "color" then
+                local c = s.get() or { 1, 1, 1 }
+                w.swatch.fill:SetColorTexture(c[1], c[2], c[3], 1)
+                w.swatch:SetEnabled(on)
+                w.swatch:SetAlpha(on and 1 or 0.4)
+                w.swatch:SetScript("OnClick", function()
+                    click()
+                    UI.PickColor(s.get() or { 1, 1, 1 }, function(r, g, b)
+                        s.set({ r, g, b })
+                        w.swatch.fill:SetColorTexture(r, g, b, 1)
+                        ns.Refresh()
+                    end)
+                end)
+                controlW = 46
             elseif s.type == "button" then
                 local list = s.buttons or { { s.text, s.func } }
                 for _, b in ipairs(w.buttons) do b:Hide() end

@@ -16,6 +16,7 @@ local function tt() return ns.db.tooltip end
 local function np() return ns.db.nameplates end
 local function mm() return ns.db.minimap end
 local function lo() return ns.db.lootopt end
+local function btn() return ns.db.buttons end
 
 -- page: id, since (version that brought it), title, text, controls
 -- control: { "check", label, tbl, key } or { "choice", label, tbl, key, { { value, label }, ... } }
@@ -107,6 +108,17 @@ local PAGES = {
     } },
     { id = "sparkle", icon = "Interface\\Icons\\INV_Enchant_ShardBrilliantSmall", since = "1.4.0", title = "OPT_GP_SPARKLE", text = "WZ_SPARKLE_TEXT", controls = {
         { "check", "OPT_GP_SPARKLE", gp, "lootSparkle" },
+    } },
+    { id = "buttons", icon = "Interface\\Icons\\Ability_Marksmanship", since = "1.5.0", title = "SEC_BUTTONS", text = "WZ_BUTTONS_TEXT", controls = {
+        { "check", "OPT_BTN_RANGE", btn, "range" },
+        { "check", "OPT_BTN_CD", btn, "cd" },
+        { "slider", "OPT_XPTEXT_SIZE", btn, "cdSize", min = 8, max = 32, step = 1 },
+    } },
+    { id = "panellook", icon = "Interface\\Icons\\INV_Misc_Note_06", since = "1.5.0", title = "WZ_PANELLOOK", text = "WZ_PANELLOOK_TEXT", controls = {
+        { "slider", "OPT_HEIGHT", panel, "height", min = 20, max = 40, step = 1 },
+        { "slider", "OPT_FONTSIZE", panel, "fontSize", min = 9, max = 16, step = 1 },
+        { "choice", "OPT_NOTICE", panel, "noticeEffect", { { "pulse", "NOTICE_PULSE" }, { "glow", "NOTICE_GLOW" },
+            { "blink", "NOTICE_BLINK" }, { "icon", "NOTICE_ICON" }, { "none", "NONE" } } },
     } },
     { id = "beastpet", icon = "Interface\\Icons\\Ability_Hunter_BeastTraining", since = "1.4.0", title = "WZ_BEASTPET", text = "WZ_BEASTPET_TEXT", controls = {
         { "check", "OPT_TT_BEASTS", tt, "beasts", class = "HUNTER" },

@@ -18,6 +18,12 @@ local minimap, actionbar, gameplay = db("minimap"), db("actionbar"), db("gamepla
 local nameplates, warnings, tooltip, root = db("nameplates"), db("warnings"), db("tooltip"), db(nil)
 local layout = db("layout")
 local lootopt = db("lootopt")
+local btns = db("buttons")
+-- a colour setting: tbl()[key] = { r, g, b }
+local function color(label, tip, tbl, key, needs)
+    return { type = "color", label = label, tip = tip, needs = needs,
+        get = function() return tbl()[key] end, set = function(v) tbl()[key] = v end }
+end
 
 -- the loot optimizer's weights for your class and the profile it rates for: one slider per stat that counts
 local RANGE = { CritRating = 30, HitRating = 30, HasteRating = 30, ExpertiseRating = 30, DodgeRating = 30, ParryRating = 30,
@@ -183,6 +189,10 @@ local PAGES = {
             choice(L.OPT_SEP, L.OPT_SEP_TIP, panel, "separator", { { "line", L.SEP_LINE }, { "dot", L.SEP_DOT },
                 { "none", L.NONE } }, P),
             slider(L.OPT_PAD, L.OPT_PAD_TIP, "pad", 2, 20, 1, " px", P),
+            slider(L.OPT_HEIGHT, L.OPT_HEIGHT_TIP, "height", 20, 40, 1, " px", P),
+            slider(L.OPT_FONTSIZE, nil, "fontSize", 9, 16, 1, " pt", P),
+            choice(L.OPT_NOTICE, L.OPT_NOTICE_TIP, panel, "noticeEffect", { { "pulse", L.NOTICE_PULSE }, { "glow", L.NOTICE_GLOW },
+                { "blink", L.NOTICE_BLINK }, { "icon", L.NOTICE_ICON }, { "none", L.NONE } }, P),
             -- a test for the width animation, only in the development copy
             ns.name == "ForeverQoLPanel_Dev" and buttons(L.OPT_TEST_WIDTH, L.OPT_TEST_WIDTH_TIP,
                 { { L.OPT_TEST_WIDTH_BTN, function() ns.Elements:TestWidths() end } }, P) or nil,
@@ -270,6 +280,33 @@ local PAGES = {
             choice(L.OPT_XPTEXT_POS, L.OPT_XPTEXT_POS_TIP, panel, "repTextPos", { { "on", L.XPTEXT_ON }, { "below", L.XPTEXT_BELOW } },
                 T, nil, true),
             slider(L.OPT_XPTEXT_SIZE, nil, "repTextSize", 7, 14, 1, " pt", T, panel, true),
+        }
+    end },
+    -- action buttons: state colours and cooldown numbers
+    { group = "NAV_INTERFACE", icon = "Interface\\Icons\\Ability_Marksmanship", title = "SEC_BUTTONS", build = function()
+        local colors = function() return ns.db.buttons.colors end
+        local cdColors = function() return ns.db.buttons.cdColors end
+        local R, C = { "btnrange" }, { "btncd" }
+        return {
+            { type = "text", label = L.BTN_TIP },
+            { type = "buttonpreview" },
+            header(L.SEC_BTN_COLORS),
+            check(L.OPT_BTN_RANGE, L.OPT_BTN_RANGE_TIP, btns, "range"),
+            color(L.BTN_COL_RANGE, nil, colors, "range", R),
+            color(L.BTN_COL_MANA, nil, colors, "mana", R),
+            color(L.BTN_COL_UNUSABLE, nil, colors, "unusable", R),
+            header(L.SEC_BTN_CD),
+            check(L.OPT_BTN_CD, L.OPT_BTN_CD_TIP, btns, "cd"),
+            slider(L.OPT_XPTEXT_SIZE, nil, "cdSize", 8, 32, 1, " pt", C, btns),
+            choice(L.OPT_BTN_OUTLINE, nil, btns, "cdOutline", { { "none", L.NONE }, { "OUTLINE", L.OUTLINE_NORMAL },
+                { "THICKOUTLINE", L.OUTLINE_THICK } }, C),
+            check(L.OPT_BTN_SHADOW, nil, btns, "cdShadow", C),
+            slider(L.OPT_BTN_MIN, L.OPT_BTN_MIN_TIP, "cdMin", 0, 10, 0.5, " s", C, btns),
+            slider(L.OPT_BTN_SHORT, L.OPT_BTN_SHORT_TIP, "cdShort", 1, 15, 1, " s", C, btns),
+            check(L.OPT_BTN_DECIMALS, nil, btns, "cdDecimals", C),
+            color(L.BTN_COL_LONG, nil, cdColors, "long", C),
+            color(L.BTN_COL_MID, nil, cdColors, "mid", C),
+            color(L.BTN_COL_SHORT, nil, cdColors, "short", C),
         }
     end },
     { group = "NAV_INTERFACE", icon = "Interface\\Icons\\INV_Misc_Map_01", title = "WZ_MINIMAP", build = function()

@@ -273,6 +273,22 @@ def main() -> int:
             assert(r and r.slot == 5 and r.pct and r.pct > 100, "loot compare: " .. tostring(r and r.pct))
             assert(LO:Compare("plate") == nil, "plate before level 40")
             assert(LO:Compare("robe"), "cloth for a warrior")
+            -- Forever talents (traits): a shaman with 0 / 20 / 0 points is rated as enhancement
+            do
+                local realClass2, realSI, realT = UnitClass, C_SpecializationInfo, C_Traits
+                UnitClass = function() return "Shaman", "SHAMAN" end
+                C_SpecializationInfo = { GetActiveSpecGroup = function() return 1 end, GetCombatConfigIDForSpecGroup = function() return 7 end }
+                C_Traits = {
+                    GetConfigInfo = function() return { treeIDs = { 99 } } end,
+                    GetGroupDisplayInfoByTreeID = function() return { { groupID = 3, displayName = "Wiederherstellung", orderIndex = 2 },
+                        { groupID = 1, displayName = "Elementarkampf", orderIndex = 0 }, { groupID = 2, displayName = "Verstärkung", orderIndex = 1 } } end,
+                    GetGroupCurrencyInfo = function() return { { traitNodeGroupID = 1, currencyInfos = { { spent = 0 } } },
+                        { traitNodeGroupID = 2, currencyInfos = { { spent = 20 } } }, { traitNodeGroupID = 3, currencyInfos = { { spent = 0 } } } } end,
+                }
+                assert(LO.Profile() == "enhancement", "talent groups: " .. tostring(LO.Profile()))
+                assert(LO.ProfileLabel("enhancement") == "Verstärkung", "tree name from the game")
+                UnitClass, C_SpecializationInfo, C_Traits = realClass2, realSI, realT
+            end
             local line = LO.Export()
             assert(line:find("^FQPW2;WARRIOR;arms;") and line:find("Strength=1"), "export: " .. line)
             assert(LO.Import((line:gsub("Strength=1;", "Strength=2;"))) and LO.Weights().Strength == 2 and LO.Weights().SpellDamage == 0, "import")
@@ -301,6 +317,15 @@ def main() -> int:
         GetLatestThreeSenders = function() return "Bob", "Alice" end
         ns.Elements:UpdateTexts(); ns.Elements.defs.mail.tip(GameTooltip)
         assert(ns.Elements.cells.mail.pulsing, "new mail does not glow")
+        for _, eff in ipairs({ "glow", "blink", "icon", "none", "pulse" }) do
+            ForeverQoLPanelDB.panel.noticeEffect = eff; ns.Elements:UpdateTexts()
+            local fn = ns.Elements.cells.mail.scripts.OnUpdate; if fn then fn(ns.Elements.cells.mail, 0.3) end
+        end
+        for _, skin in ipairs({ "classic", "modern" }) do
+            ForeverQoLPanelDB.panel.skin = skin; ForeverQoLPanelDB.panel.height = 36; ForeverQoLPanelDB.panel.fontSize = 14; ns.Refresh()
+            assert(ns.Elements.cells.gold.h == 36, "panel height not applied (" .. skin .. ")")
+        end
+        ForeverQoLPanelDB.panel.skin = "classic"; ForeverQoLPanelDB.panel.height = 26; ForeverQoLPanelDB.panel.fontSize = 12; ns.Refresh()
         HasNewMail = function() return false end; ns.Elements:UpdateTexts()
         -- reputation strip: a watched faction adds it in both skins, the tooltip reads it
         GetWatchedFactionInfo = function() return "Darnassus", 5, 3000, 9000, 4500 end
@@ -334,6 +359,31 @@ def main() -> int:
             assert(not ns.Dock.xpHolder:IsShown() and not ns.XP.free, "XP bar not back on the panel")
         end
         P.skin = "classic"; P.repPlace = "attach"
+        -- action buttons: out of range tints the icon, a cooldown gets a number, the global cooldown none
+        do
+            local BS = ns.ButtonState
+            local b = CreateFrame("CheckButton", "ActionButton1", UIParent)
+            local tint = {}
+            b.icon = { SetVertexColor = function(_, r, g, bl) tint = { r, g, bl } end }
+            b.action = 1
+            b.IsVisible = function() return true end
+            local cdHooks = {}
+            b.cooldown = CreateFrame("Cooldown", nil, b)
+            local realHook = hooksecurefunc
+            HasAction = function() return true end
+            IsUsableAction = function() return true, false end
+            IsActionInRange = function() return false end
+            BS:Collect(); BS:Tint(b)
+            assert(tint[1] == 1 and tint[2] < 0.5, "out of range not tinted")
+            b.fqpStart, b.fqpDur = 100, 30
+            BS:Count(b, 110)
+            assert(b.fqpCD and b.fqpCD.text, "no cooldown number")
+            assert(BS.Format(12.4, ForeverQoLPanelDB.buttons) == "12" and BS.Format(90, ForeverQoLPanelDB.buttons) == "2m", "cooldown format")
+            b.fqpStart, b.fqpDur = 100, 1.5
+            BS:Count(b, 100.5)
+            ForeverQoLPanelDB.buttons.range = false; BS:Refresh(); ForeverQoLPanelDB.buttons.range = true
+            HasAction, IsUsableAction, IsActionInRange = nil, nil, nil
+        end
         ns.Mover:Toggle(true); assert(ns.Mover.active and ns.Warnings.moving and ForeverQoLPanelGrid:IsShown(), "move mode not on")
         local sx, sy = ns.Mover.SnapCenter(ns.Dock.xpHolder)
         ns.Mover:Toggle(false); assert(not ns.Mover.active and not ns.Warnings.moving, "move mode stuck")
@@ -438,12 +488,12 @@ def main() -> int:
         ns.Elements.defs.pvp.text(); ns.Elements.defs.pvp.tip(GameTooltip); ns.Elements.defs.pvp.click()
         ForeverQoLPanelDB.panel.border = 1; ns.Refresh(); ForeverQoLPanelDB.panel.border = 3; ns.Refresh()
         ns.Wizard:Open(true)
-        for _ = 1, 25 do ns.Wizard:Go(1) end
+        for _ = 1, 30 do ns.Wizard:Go(1) end
         assert(ForeverQoLPanelDB.wizard == ns.VERSION, "wizard not finished")
         ForeverQoLPanelDB.wizard = "0.1.0"; ns.Wizard:Open(false)
-        assert(#ns.Wizard.pages == 15, "update pages: " .. #ns.Wizard.pages)
+        assert(#ns.Wizard.pages == 17, "update pages: " .. #ns.Wizard.pages)
         for i = 1, 8 do ns.Wizard:Jump(i) end
-        ns.Wizard:OpenNews(); assert(#ns.Wizard.pages == 4 and ns.Wizard.pages[2].id == "lootopt", "news pages: " .. #ns.Wizard.pages)
+        ns.Wizard:OpenNews(); assert(#ns.Wizard.pages == 3 and ns.Wizard.pages[2].id == "buttons", "news pages: " .. #ns.Wizard.pages)
         ns.Wizard.frame.tiles[1]:GetScript("OnClick")(ns.Wizard.frame.tiles[1])
         ns.Wizard:Finish()
         SlashCmdList.FOREVERQOLPANEL("reset")

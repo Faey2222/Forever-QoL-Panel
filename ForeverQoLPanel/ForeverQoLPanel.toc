@@ -16,6 +16,7 @@ Reputation.lua
 Elements.lua
 Minimap.lua
 ActionBar.lua
+ButtonState.lua
 Nameplates.lua
 Gameplay.lua
 Mail.lua

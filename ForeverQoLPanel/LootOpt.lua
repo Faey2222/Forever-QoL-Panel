@@ -17,7 +17,7 @@ local function on(key) local d = db(); return d.enabled and (key == nil or d[key
 
 -- Stats ------------------------------------------------------------------------------
 -- Pawn's stat names, and the item stat names the client may use for them. Weapon damage per second is ranged or
--- melee by the weapon's slot. Spell school damage is not read from items (the client has no stat for it).
+-- melee by the weapon's slot.
 local STAT_KEYS = {
     Strength = { "ITEM_MOD_STRENGTH_SHORT" }, Agility = { "ITEM_MOD_AGILITY_SHORT" },
     Stamina = { "ITEM_MOD_STAMINA_SHORT" }, Intellect = { "ITEM_MOD_INTELLECT_SHORT" }, Spirit = { "ITEM_MOD_SPIRIT_SHORT" },
@@ -37,10 +37,18 @@ local STAT_KEYS = {
     BlockValue = { "ITEM_MOD_BLOCK_VALUE_SHORT" }, Armor = { "RESISTANCE0_NAME" },
     MeleeDps = { "ITEM_MOD_DAMAGE_PER_SECOND_SHORT" }, RangedDps = {},
     Health = { "ITEM_MOD_HEALTH_SHORT" }, Mana = { "ITEM_MOD_MANA_SHORT" },
-    FireResist = { "RESISTANCE2_NAME" }, NatureResist = { "RESISTANCE3_NAME" }, FrostResist = { "RESISTANCE4_NAME" },
-    ShadowResist = { "RESISTANCE5_NAME" }, ArcaneResist = { "RESISTANCE6_NAME" },
+    FireResist = { "RESISTANCE2_NAME", "ITEM_MOD_FIRE_RESISTANCE_SHORT" },
+    NatureResist = { "RESISTANCE3_NAME", "ITEM_MOD_NATURE_RESISTANCE_SHORT" },
+    FrostResist = { "RESISTANCE4_NAME", "ITEM_MOD_FROST_RESISTANCE_SHORT" },
+    ShadowResist = { "RESISTANCE5_NAME", "ITEM_MOD_SHADOW_RESISTANCE_SHORT" },
+    ArcaneResist = { "RESISTANCE6_NAME", "ITEM_MOD_ARCANE_RESISTANCE_SHORT" },
+    -- damage of one spell school (Forever names these as item stats)
+    FireSpellDamage = { "ITEM_MOD_FIRE_DAMAGE_DONE_SHORT" }, FrostSpellDamage = { "ITEM_MOD_FROST_DAMAGE_DONE_SHORT" },
+    NatureSpellDamage = { "ITEM_MOD_NATURE_DAMAGE_DONE_SHORT" }, ShadowSpellDamage = { "ITEM_MOD_SHADOW_DAMAGE_DONE_SHORT" },
+    ArcaneSpellDamage = { "ITEM_MOD_ARCANE_DAMAGE_DONE_SHORT" }, HolySpellDamage = { "ITEM_MOD_HOLY_DAMAGE_DONE_SHORT" },
 }
 local ORDER = { "Strength", "Agility", "Stamina", "Intellect", "Spirit", "Ap", "Rap", "FeralAp", "SpellDamage", "Healing",
+    "FireSpellDamage", "FrostSpellDamage", "NatureSpellDamage", "ShadowSpellDamage", "ArcaneSpellDamage", "HolySpellDamage",
     "Mp5", "Hp5", "CritRating", "HitRating", "HasteRating", "ExpertiseRating", "DefenseRating", "DodgeRating",
     "ParryRating", "BlockRating", "BlockValue", "Armor", "MeleeDps", "RangedDps", "Health", "Mana", "FireResist",
     "FrostResist", "NatureResist", "ShadowResist", "ArcaneResist" }
@@ -68,9 +76,57 @@ local function class() return select(2, UnitClass("player")) end
 -- Profiles -----------------------------------------------------------------------------
 
 -- The talent trees (Forever: three per class): name and points spent
+-- Forever: one trait tree per class, split into three groups (the talent trees) with their own points; read for the
+-- active spec group (primary / secondary) through the client's specialization and traits functions
+local function traitSpecs()
+    local SI, T = C_SpecializationInfo, C_Traits
+    if not (SI and T and SI.GetActiveSpecGroup and SI.GetCombatConfigIDForSpecGroup and T.GetConfigInfo
+        and T.GetGroupDisplayInfoByTreeID and T.GetGroupCurrencyInfo) then return nil end
+    local ok, group = pcall(SI.GetActiveSpecGroup)
+    local config = ok and group and select(2, pcall(SI.GetCombatConfigIDForSpecGroup, group))
+    if type(config) ~= "number" then return nil end
+    local okI, info = pcall(T.GetConfigInfo, config)
+    local tree = okI and info and info.treeIDs and info.treeIDs[1]
+    if not tree then return nil end
+    local okD, groups = pcall(T.GetGroupDisplayInfoByTreeID, tree)
+    if not okD or type(groups) ~= "table" or #groups == 0 then return nil end
+    local ids = {}
+    for _, g in ipairs(groups) do ids[#ids + 1] = g.groupID end
+    local spent = {}
+    local okC, currency = pcall(T.GetGroupCurrencyInfo, config, ids)
+    for _, c in ipairs(okC and currency or {}) do
+        local ci = c.currencyInfos and c.currencyInfos[1]
+        if ci and c.traitNodeGroupID then spent[c.traitNodeGroupID] = ci.spent or 0 end
+    end
+    table.sort(groups, function(x, y) return (x.orderIndex or 0) < (y.orderIndex or 0) end)
+    local list = {}
+    for i, g in ipairs(groups) do
+        if i > 3 then break end
+        list[i] = { name = g.displayName or ("#" .. i), points = spent[g.groupID] or 0 }
+    end
+    return list
+end
+
 function LO.Specs()
+    local traits = traitSpecs()
+    if traits then
+        local pts = {}
+        for i, sp in ipairs(traits) do pts[i] = sp.points end
+        ns.Debug.Set("lootSpecs", { via = "traits", points = pts })
+        return traits
+    end
     local list = {}
     local n = GetNumTalentTabs and GetNumTalentTabs() or 0
+    -- clients with specializations instead of talent tabs: the active one counts as the one with the points
+    if n == 0 and GetSpecialization and GetSpecializationInfo then
+        local active = GetSpecialization()
+        for i = 1, 3 do
+            local ok, _, name = pcall(GetSpecializationInfo, i)
+            if ok and type(name) == "string" then list[i] = { name = name, points = (i == active) and 1 or 0 } end
+        end
+        ns.Debug.Set("lootSpecs", { via = "specialization", active = active, count = #list })
+        return list
+    end
     for i = 1, min(n, 3) do
         local r = { GetTalentTabInfo(i) }
         local name = type(r[2]) == "string" and r[2] or (type(r[1]) == "string" and r[1]) or ("#" .. i)
@@ -329,7 +385,9 @@ function LO:Compare(link)
         local newScore = score(newStats, w, roomFor(slot, caps))
         local r = { new = newScore, old = oldScore, slot = slot, oldLink = oldLink, newStats = newStats, oldStats = oldStats }
         r.empty = not oldLink
-        r.pct = oldScore > 0 and (newScore - oldScore) / oldScore * 100 or nil
+        -- against a worn piece worth nothing for you, anything that counts is far better
+        if oldScore > 0 then r.pct = (newScore - oldScore) / oldScore * 100
+        elseif newScore > 0 then r.pct = math.huge end
         if not best or (newScore - oldScore) > (best.new - best.old) then best = r end
     end
     if i.equipLoc == "INVTYPE_2HWEAPON" then
@@ -807,12 +865,17 @@ end
 -- items in the bags that could go, cheapest first (vendor value x stack); quest items, items without value and
 -- the ones you ignore stay
 function LO:Candidates()
-    local list = {}
+    local list, missing = {}, 0
     for bag = 0, (NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4) do
         for slot = 1, ((CC and CC.GetContainerNumSlots and CC.GetContainerNumSlots(bag)) or 0) do
             local it = bagItem(bag, slot)
             if it and it.itemID and not db().ignore[it.itemID] and not it.isLocked then
                 local i = info(it.hyperlink or it.itemID)
+                -- item data not loaded yet: asked for, the window looks again in a moment
+                if not i then
+                    missing = missing + 1
+                    if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(it.itemID) end
+                end
                 local quest = i and i.classID == 12
                 if i and not quest and i.sellPrice > 0 then
                     list[#list + 1] = { bag = bag, slot = slot, link = it.hyperlink, id = it.itemID,
@@ -822,7 +885,7 @@ function LO:Candidates()
         end
     end
     table.sort(list, function(a, b) if a.value ~= b.value then return a.value < b.value end return a.quality < b.quality end)
-    return list
+    return list, missing
 end
 
 -- the first loot item still lying there, with its value
@@ -880,7 +943,8 @@ end
 
 function LO:RefreshFull(keepIndex)
     local f = self:FullFrame()
-    f.list = self:Candidates()
+    local missing
+    f.list, missing = self:Candidates()
     f.index = keepIndex and min(f.index or 1, #f.list) or 1
     if f.index < 1 then f.index = 1 end
     self:DrawFull()
@@ -895,6 +959,10 @@ end
 
 function LO:DrawFull()
     local f = self.full
+    local link0 = pendingLoot()
+    ns.Debug.Set("lootBagsFull", { candidates = f.list and #f.list or 0, loot = link0 ~= nil, open = self.lootOpen })
+    -- nothing to swap and no loot left: no empty window
+    if (not f.list or #f.list == 0) and not link0 then f:Hide() return end
     f:Skin()
     f.title:SetText(L().LO_FULL_TITLE)
     local link, lootValue = pendingLoot()
@@ -939,6 +1007,12 @@ function LO:BagsFull()
     if not on("bagsFull") or not self.lootOpen then return end
     self:RefreshFull()
     self.full:Show()
+    -- the loot list and item data may not be ready at the moment of the error: drawn again shortly after
+    for _, delay in ipairs({ 0.2, 0.6, 1.2 }) do
+        C_Timer.After(delay, function()
+            if self.full:IsShown() then ns.Debug.Call("LootOpt", LO.RefreshFull, LO, true) end
+        end)
+    end
 end
 
 -- Events --------------------------------------------------------------------------------
@@ -966,6 +1040,14 @@ ns.OnLogin(function()
     end)
     ns.On("LOOT_OPENED", function() LO.lootOpen = true end)
     ns.On("LOOT_READY", function() LO.lootOpen = true end)
+    -- the loot or the bags changed while the window is open: drawn again
+    local function redraw()
+        if LO.full and LO.full:IsShown() then ns.Debug.Call("LootOpt", LO.RefreshFull, LO, true) end
+    end
+    ns.On("LOOT_SLOT_CLEARED", redraw)
+    ns.On("LOOT_SLOT_CHANGED", redraw)
+    ns.On("GET_ITEM_INFO_RECEIVED", redraw)
+    ns.On("BAG_UPDATE_DELAYED", redraw)
     ns.On("LOOT_CLOSED", function()
         LO.lootOpen = false
         if LO.full and LO.full:IsShown() then LO.full:Hide() end

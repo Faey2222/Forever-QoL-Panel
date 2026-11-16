@@ -2,7 +2,7 @@ local ADDON, ns = ...
 
 ns.name = ADDON
 ns.title = "Forever QoL Panel"
-ns.VERSION = "1.4.0"   -- the setup wizard shows the pages of features newer than the last version seen
+ns.VERSION = "1.5.0"   -- the setup wizard shows the pages of features newer than the last version seen
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\media\\"
 
 function ns.Tex(name)
@@ -144,6 +144,8 @@ ns.defaults = {
         pinned = false,
         hideBlizzardXP = true,
         repBar = true,           -- reputation bar below the XP bar, for the watched faction
+        height = 26, fontSize = 12,   -- the panel's height and the elements' font size
+        noticeEffect = "pulse",  -- how an element asks for attention (new mail): pulse, glow, blink, icon, none
         repWidth = 85, repTicks = 10,
         repPlace = "attach",     -- attach (hangs from the XP bar), below (own bar), free (move mode places it)
         xpPlace = "panel",       -- panel or free; xpPos / repPos: centre offsets of bars set free        -- its width in % of the XP bar, tick marks
@@ -168,6 +170,10 @@ ns.defaults = {
     minimap = { show = true, angle = 205, keep = {}, floating = true },   -- floating: collector button without panel
     actionbar = { enabled = true, placeNew = true, replaceRanks = true, general = false, messages = true, seen = {} },
     layout = { grid = true, snap = true, gridSize = 32 },   -- move mode (Mover.lua)
+    -- action buttons (ButtonState.lua): state colours and cooldown numbers
+    buttons = { range = true, colors = { range = { 1, 0.15, 0.15 }, mana = { 0.35, 0.5, 1 }, unusable = { 0.4, 0.4, 0.4 } },
+        cd = true, cdSize = 16, cdOutline = "OUTLINE", cdShadow = true, cdMin = 2, cdShort = 5, cdDecimals = false,
+        cdColors = { long = { 0.8, 0.8, 0.8 }, mid = { 1, 1, 1 }, short = { 1, 0.3, 0.3 } } },
     -- loot optimizer (LootOpt.lua): weights / caps = own values per class (and talent tree), ignore = never offered
     -- to delete, ignoreUpgrade = never offered to put on
     lootopt = { enabled = true, tooltip = true, upgrade = true, bagsFull = true, threshold = 3, spec = "auto",
@@ -316,6 +322,7 @@ function ns.Refresh()
     if ns.Elements and ns.Elements.ApplyMinimapClock then ns.Elements:ApplyMinimapClock() end
     if ns.Warnings and ns.Warnings.ApplyLook then ns.Warnings:ApplyLook() end
     if ns.Gameplay and ns.Gameplay.ApplyLootLook then ns.Gameplay:ApplyLootLook() end
+    if ns.ButtonState then ns.ButtonState:Refresh() end
 end
 
 ns.On("ADDON_LOADED", function(_, name)
