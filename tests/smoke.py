@@ -260,6 +260,7 @@ def main() -> int:
                 if link == "old" then return "Old Chest", "old", 1, 10, 5, "", "", 1, "INVTYPE_CHEST", 1, 50, 4, 3, 1 end
                 if link == "robe" then return "Robe", "robe", 1, 10, 5, "", "", 1, "INVTYPE_CHEST", 1, 50, 4, 1, 1 end
                 if link == "plate" then return "Plate", "plate", 2, 40, 40, "", "", 1, "INVTYPE_CHEST", 1, 50, 4, 4, 1 end
+                if type(link) == "string" and link:find("99999") then return nil end
                 return realItemInfo(link)
             end
             GetInventoryItemLink = function(_, slot) if slot == 5 then return "old" end end
@@ -309,6 +310,15 @@ def main() -> int:
             for _, ev in ipairs({ "LOOT_OPENED" }) do MOCK_fire(ev) end
             LO:BagsFull()
             assert(LO.full and LO.full:IsShown(), "bags full window")
+            -- loot whose item data the game has not loaded yet: its real name from the loot window, no false hint
+            local realNum, realLink, realInfo = GetNumLootItems, GetLootSlotLink, GetLootSlotInfo
+            GetNumLootItems = function() return 1 end
+            GetLootSlotLink = function() return "|cff1eff00|Hitem:99999::|h[Neuer Kilt]|h|r" end
+            GetLootSlotInfo = function() return 134586, "Neuer Kilt", 1, nil, 2 end
+            LO:RefreshFull(true)
+            assert(LO.full.lootRow.name:GetText() == "Neuer Kilt", "loot row: " .. tostring(LO.full.lootRow.name:GetText()))
+            assert(LO.full.hint:GetText() == "", "hint with unknown value: " .. tostring(LO.full.hint:GetText()))
+            GetNumLootItems, GetLootSlotLink, GetLootSlotInfo = realNum, realLink, realInfo
             LO.full:Hide()
             ns.ItemInfo, GetInventoryItemLink, GetItemStats, UnitLevel = realItemInfo, realInvLink, realStats, realLevel
         end

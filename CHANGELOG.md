@@ -1,6 +1,7 @@
-### Forever QoL Panel 1.5.1 – Cooldown numbers in combat
+### Forever QoL Panel 1.5.2 – Bags full window
 
 #### Fixes
-- **Action buttons:** no more Lua errors in combat. The game keeps cooldowns secret there, so the addon no longer counts them itself; the game's own countdown numbers show instead, in your font, size, outline and shadow. The state colours keep the game's own colouring while it keeps those values secret
+- **Bags full:** loot whose item data the game had not loaded yet showed as "Nothing" worth 0; it now shows its name and icon, its value as soon as it is known, and the "worth less" hint only when the value is certain
+- **Bags full:** "Swap" picks up the loot as soon as the deleted item's slot is really free, instead of one try that could come too early
 
 Ideas, wishes or bugs? Let us know on CurseForge or GitHub.

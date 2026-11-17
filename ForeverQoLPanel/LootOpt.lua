@@ -588,12 +588,22 @@ local function itemRow(parent)
         GameTooltip:Show()
     end)
     r:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    function r:Set(link, sub)
+    -- fallback { icon, name, quality }: what the loot window knows about an item whose data is not loaded yet
+    function r:Set(link, sub, fallback)
         self.link = link
         local i = link and info(link)
-        self.icon:SetTexture(i and i.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-        local c = i and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[i.quality]
-        self.name:SetText(i and i.name or L().LO_NOTHING)
+        local icon, name, quality = i and i.icon, i and i.name, i and i.quality
+        if link and not i then
+            fallback = fallback or {}
+            local id = tonumber(link:match("item:(%d+)"))
+            icon = fallback.icon or (id and C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(id))
+            name = fallback.name or link:match("%[(.-)%]")
+            quality = fallback.quality
+            if id and C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(id) end
+        end
+        self.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+        local c = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+        self.name:SetText(name or L().LO_NOTHING)
         if c then self.name:SetTextColor(c.r, c.g, c.b) else self.name:SetTextColor(0.7, 0.7, 0.7) end
         self.sub:SetText(sub or "")
     end
@@ -893,9 +903,10 @@ local function pendingLoot()
     for i = 1, (GetNumLootItems and GetNumLootItems() or 0) do
         local link = GetLootSlotLink and GetLootSlotLink(i)
         if link then
-            local _, _, count = GetLootSlotInfo(i)
+            local tex, name, count, _, quality = GetLootSlotInfo(i)
             local inf = info(link)
-            return link, (inf and inf.sellPrice or 0) * (count or 1), i
+            local value = inf and (inf.sellPrice or 0) * (count or 1) or nil
+            return link, value, i, { icon = tex, name = name, quality = quality }
         end
     end
 end
@@ -965,14 +976,14 @@ function LO:DrawFull()
     if (not f.list or #f.list == 0) and not link0 then f:Hide() return end
     f:Skin()
     f.title:SetText(L().LO_FULL_TITLE)
-    local link, lootValue = pendingLoot()
+    local link, lootValue, _, fallback = pendingLoot()
     f.lootLabel:SetText(L().LO_LOOT)
-    f.lootRow:Set(link, link and ns.Money(lootValue) or nil)
+    f.lootRow:Set(link, link and (lootValue and ns.Money(lootValue) or "…") or nil, fallback)
     f.bagLabel:SetText(L().LO_CHEAPEST)
     local c = f.list[f.index]
     f.bagRow:Set(c and c.link, c and ((c.count > 1 and (c.count .. "x  ") or "") .. ns.Money(c.value)) or nil)
     f.count:SetText(c and (f.index .. " / " .. #f.list) or "")
-    f.hint:SetText(c and link and lootValue < c.value and L().LO_LOOT_CHEAPER or "")
+    f.hint:SetText(c and link and lootValue and lootValue < c.value and L().LO_LOOT_CHEAPER or "")
     for _, b in ipairs({ f.prev, f.nxt, f.swap, f.delete, f.ign }) do b:SetEnabled(c ~= nil) end
     f.swap:SetEnabled(c ~= nil and link ~= nil)
 end
@@ -985,11 +996,7 @@ function LO:Delete(swap)
     local function go()
         if CC and CC.PickupContainerItem then CC.PickupContainerItem(c.bag, c.slot) end
         if CursorHasItem and CursorHasItem() then DeleteCursorItem() end
-        if swap then
-            C_Timer.After(0.3, function()
-                for i = 1, (GetNumLootItems and GetNumLootItems() or 0) do if GetLootSlotLink(i) then LootSlot(i) break end end
-            end)
-        end
+        if swap then LO:LootWhenFree(8) end
         C_Timer.After(0.4, function() if f:IsShown() then LO:RefreshFull(true) end end)
     end
     if (c.quality or 0) >= 2 and StaticPopupDialogs then
@@ -1001,6 +1008,32 @@ function LO:Delete(swap)
     else
         go()
     end
+end
+
+-- free slots in the normal bags
+local function freeSlots()
+    local n = 0
+    for bag = 0, (NUM_BAG_SLOTS or 4) do
+        if CC and CC.GetContainerNumFreeSlots then
+            local free, family = CC.GetContainerNumFreeSlots(bag)
+            if (family or 0) == 0 then n = n + (free or 0) end
+        end
+    end
+    return n
+end
+
+-- after deleting: the loot is picked up as soon as the bags have room (the game takes a moment), up to `tries` times
+function LO:LootWhenFree(tries)
+    C_Timer.After(0.25, function()
+        if not self.lootOpen then return end
+        local link, _, slot = pendingLoot()
+        if not slot then return end
+        if freeSlots() > 0 then
+            LootSlot(slot)
+        elseif tries > 1 then
+            self:LootWhenFree(tries - 1)
+        end
+    end)
 end
 
 function LO:BagsFull()
