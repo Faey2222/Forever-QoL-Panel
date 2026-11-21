@@ -318,6 +318,15 @@ def main() -> int:
             LO:RefreshFull(true)
             assert(LO.full.lootRow.name:GetText() == "Neuer Kilt", "loot row: " .. tostring(LO.full.lootRow.name:GetText()))
             assert(LO.full.hint:GetText() == "", "hint with unknown value: " .. tostring(LO.full.hint:GetText()))
+            -- coins first, then a fish whose item data has no name yet: the coins are skipped, the fish shown by name
+            GetNumLootItems = function() return 2 end
+            GetLootSlotType = function(i) return i == 1 and 2 or 1 end
+            GetLootSlotLink = function(i) if i == 2 then return "|cffffffff|Hitem:6362::|h[Fisch]|h|r" end end
+            GetLootSlotInfo = function(i) if i == 1 then return 133784, "12 Kupfer", 0 end return 133888, "Fisch", 1, nil, 1 end
+            LO:RefreshFull(true)
+            assert(LO.full.lootRow.link and LO.full.lootRow.link:find("6362"), "loot row after coins: " .. tostring(LO.full.lootRow.link))
+            assert(ForeverQoLPanelDB.debug.lootSlots and #ForeverQoLPanelDB.debug.lootSlots == 2, "loot slots in debug data")
+            GetLootSlotType = nil
             GetNumLootItems, GetLootSlotLink, GetLootSlotInfo = realNum, realLink, realInfo
             LO.full:Hide()
             ns.ItemInfo, GetInventoryItemLink, GetItemStats, UnitLevel = realItemInfo, realInvLink, realStats, realLevel
@@ -405,6 +414,58 @@ def main() -> int:
             IsActionInRange = function() return false end
             ForeverQoLPanelDB.buttons.range = false; BS:Refresh(); ForeverQoLPanelDB.buttons.range = true
             HasAction, IsUsableAction, IsActionInRange = nil, nil, nil
+        end
+        -- target cast bar: hidden stays hidden while it fades itself in, free sits on its holder, default comes back
+        do
+            local bar = CreateFrame("StatusBar", "TargetFrameSpellBar", UIParent)
+            local alpha = 1
+            bar.SetAlpha = function(_, a) alpha = a end
+            -- the interrupt animation the game plays on the bar
+            local anim = { stopped = false }
+            anim.HookScript = function(self, _, fn) self.onPlay = fn end
+            anim.Stop = function(self) self.stopped = true end
+            bar.GetAnimationGroups = function() return anim end
+            local onShow
+            bar.HookScript = function(_, name, fn) if name == "OnShow" then onShow = fn end end
+            local CB = ns.CastBar
+            ForeverQoLPanelDB.castbar.target = "hide"; CB:Refresh()
+            bar:SetAlpha(1)
+            assert(alpha == 0, "hidden cast bar visible again")
+            alpha = 1; anim.onPlay(anim)
+            assert(anim.stopped and alpha == 0, "interrupt animation shows the hidden cast bar")
+            assert(not bar:IsShown(), "hidden cast bar still shown")
+            bar:Show(); onShow(bar)
+            assert(not bar:IsShown(), "game shows the hidden cast bar again")
+            -- Forever keeps the bar's layout values secret
+            local S = {}; MOCK_secret[S] = true
+            bar.GetNumPoints = function() return S end
+            bar.GetWidth = function() return S end
+            ForeverQoLPanelDB.castbar.target = "free"; CB:Refresh()
+            assert(alpha == 1 and ForeverQoLPanelCastBar_target and ForeverQoLPanelCastBar_target:IsShown(), "free cast bar")
+            ForeverQoLPanelDB.castbar.target = "default"; CB:Refresh()
+            assert(not ForeverQoLPanelCastBar_target:IsShown(), "holder left after default")
+            MOCK_secret[S] = nil
+        end
+        -- warning sounds: each category its own, only when its warning is new, the old switch migrated
+        do
+            local W, played = ns.Warnings, {}
+            local oldPS = PlaySound
+            PlaySound = function(id) played[#played + 1] = id end
+            assert(ForeverQoLPanelDB.warnings.soundFood == "none", "sound migration: " .. tostring(ForeverQoLPanelDB.warnings.soundFood))
+            ForeverQoLPanelDB.warnings.soundFood, ForeverQoLPanelDB.warnings.soundAmmo = "ready", "alarm"
+            W.seen = {}
+            local list = { { "x", "food", "cons", "food" }, { "x", "class", "buffs", "class123" } }
+            W:Show(list)
+            assert(#played == 1, "food sound: " .. #played)
+            W:Show(list)
+            assert(#played == 1, "sound repeated for a known warning")
+            list[#list + 1] = { "x", "ammo", "cons", "ammo" }
+            W:Show(list)
+            assert(#played == 2, "ammo sound: " .. #played)
+            W:Show({}); PlaySound = oldPS
+            -- every sound has its name
+            for _, k in ipairs(W.SOUND_ORDER) do assert(W.SOUNDS[k] and ns.L["SND_" .. k:upper()], "sound name " .. k) end
+            ForeverQoLPanelDB.warnings.soundFood, ForeverQoLPanelDB.warnings.soundAmmo = "none", "none"
         end
         ns.Mover:Toggle(true); assert(ns.Mover.active and ns.Warnings.moving and ForeverQoLPanelGrid:IsShown(), "move mode not on")
         local sx, sy = ns.Mover.SnapCenter(ns.Dock.xpHolder)
@@ -513,9 +574,9 @@ def main() -> int:
         for _ = 1, 30 do ns.Wizard:Go(1) end
         assert(ForeverQoLPanelDB.wizard == ns.VERSION, "wizard not finished")
         ForeverQoLPanelDB.wizard = "0.1.0"; ns.Wizard:Open(false)
-        assert(#ns.Wizard.pages == 17, "update pages: " .. #ns.Wizard.pages)
+        assert(#ns.Wizard.pages == 19, "update pages: " .. #ns.Wizard.pages)
         for i = 1, 8 do ns.Wizard:Jump(i) end
-        ns.Wizard:OpenNews(); assert(#ns.Wizard.pages == 3 and ns.Wizard.pages[2].id == "buttons", "news pages: " .. #ns.Wizard.pages)
+        ns.Wizard:OpenNews(); assert(#ns.Wizard.pages == 3 and ns.Wizard.pages[2].id == "castbar" and ns.Wizard.pages[3].id == "warnsounds", "news pages: " .. #ns.Wizard.pages)
         ns.Wizard.frame.tiles[1]:GetScript("OnClick")(ns.Wizard.frame.tiles[1])
         ns.Wizard:Finish()
         SlashCmdList.FOREVERQOLPANEL("reset")

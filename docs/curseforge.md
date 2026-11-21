@@ -25,7 +25,7 @@ Every feature can be switched on or off on its own. A short setup wizard walks y
 - Both bars can stay on the panel or be placed anywhere on the screen
 
 **Move mode with grid**
-- One mode to place everything that can be moved: free bars, warning groups and loot text
+- One mode to place everything that can be moved: free bars, cast bars, warning groups and loot text
 - Frames snap to an adjustable grid while you drag them
 
 **Loot optimizer**
@@ -53,6 +53,9 @@ Every feature can be switched on or off on its own. A short setup wizard walks y
 - Icons tinted when the target is out of range, you lack mana or a spell cannot be used
 - Cooldown numbers on the buttons, with your choice of colours, font size, outline and shadow, and a live preview in the options
 
+**Cast bars**
+- The cast bars below the target and focus frames (not on nameplates): as in the game, hidden, or placed freely and scaled
+
 **Quest markers on nameplates**
 - Units your quests still need get a kill or loot icon, optionally with the progress
 - Position and size adjustable
@@ -60,7 +63,8 @@ Every feature can be switched on or off on its own. A short setup wizard walks y
 **Buff and consumable warnings**
 - Missing class buffs, food buff, flask or elixir, weapon buffs, buffs about to run out, and low ammo for hunters
 - Choose where they apply: everywhere, dungeons and raids, or raids only; optionally quiet in cities and inns
-- Movable, scalable, groupable, with optional animations and sound
+- Movable, scalable, groupable, with optional animations
+- Each kind of warning with its own sound, chosen from the game's sounds
 
 **Tooltips**
 - Sell value, including whole stacks

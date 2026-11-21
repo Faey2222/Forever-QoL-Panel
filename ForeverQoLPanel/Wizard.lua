@@ -17,6 +17,10 @@ local function np() return ns.db.nameplates end
 local function mm() return ns.db.minimap end
 local function lo() return ns.db.lootopt end
 local function btn() return ns.db.buttons end
+local function cb() return ns.db.castbar end
+-- a few of the warning sounds for the news page (all of them are in the options)
+local SOUNDS = { { "none", "NONE" }, { "raid", "SND_RAID" }, { "boss", "SND_BOSS" }, { "ready", "SND_READY" },
+    { "bgReady", "SND_BGREADY" }, { "alarm", "SND_ALARM" } }
 
 -- page: id, since (version that brought it), title, text, controls
 -- control: { "check", label, tbl, key } or { "choice", label, tbl, key, { { value, label }, ... } }
@@ -119,6 +123,15 @@ local PAGES = {
         { "slider", "OPT_FONTSIZE", panel, "fontSize", min = 9, max = 16, step = 1 },
         { "choice", "OPT_NOTICE", panel, "noticeEffect", { { "pulse", "NOTICE_PULSE" }, { "glow", "NOTICE_GLOW" },
             { "blink", "NOTICE_BLINK" }, { "icon", "NOTICE_ICON" }, { "none", "NONE" } } },
+    } },
+    { id = "castbar", icon = "Interface\\Icons\\Spell_Holy_MagicalSentry", since = "1.6.0", title = "SEC_CASTBAR", text = "WZ_CASTBAR_TEXT", controls = {
+        { "choice", "CB_TARGET", cb, "target", { { "default", "CB_DEFAULT" }, { "hide", "CB_HIDE" }, { "free", "PLACE_FREE" } } },
+    } },
+    { id = "warnsounds", icon = "Interface\\Icons\\INV_Misc_Bell_01", since = "1.6.0", title = "WZ_SOUNDS", text = "WZ_SOUNDS_TEXT", controls = {
+        { "choice", "OPT_WARN_CLASS", wn, "soundClass", SOUNDS },
+        { "choice", "OPT_WARN_FOOD", wn, "soundFood", SOUNDS },
+        { "choice", "OPT_WARN_FLASK", wn, "soundFlask", SOUNDS },
+        { "choice", "OPT_WARN_AMMO", wn, "soundAmmo", SOUNDS, class = "HUNTER" },
     } },
     { id = "beastpet", icon = "Interface\\Icons\\Ability_Hunter_BeastTraining", since = "1.4.0", title = "WZ_BEASTPET", text = "WZ_BEASTPET_TEXT", controls = {
         { "check", "OPT_TT_BEASTS", tt, "beasts", class = "HUNTER" },

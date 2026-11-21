@@ -539,6 +539,35 @@ local function showGroup(f, list)
     f:SetShown(#list > 0)
 end
 
+-- Sounds per category -------------------------------------------------------------------
+-- Each kind of warning has its own sound (or none); it plays when a warning of that kind appears.
+-- The game's own sounds; one this client does not have simply stays silent.
+W.SOUNDS = {   -- choice -> SOUNDKIT name (or false), id when the name is missing
+    raid = { "RAID_WARNING", 8959 }, ready = { "READY_CHECK", 8960 }, alarm = { "ALARM_CLOCK_WARNING_3", 12889 },
+    alarmB = { "ALARM_CLOCK_WARNING_1", 18871 }, alarmC = { "ALARM_CLOCK_WARNING_2", 12867 },
+    boss = { "RAID_BOSS_EMOTE_WARNING", 12197 }, whisper = { "TELL_MESSAGE", 3081 }, ping = { "MAP_PING", 3175 },
+    questFail = { "IG_QUEST_FAILED", 847 }, invite = { "IG_PLAYER_INVITE", 880 }, levelUp = { false, 888 },
+    bgReady = { "PVP_THROUGH_QUEUE", 8459 }, auction = { "AUCTION_WINDOW_OPEN", 5274 }, coins = { "LOOT_WINDOW_COIN_SOUND", 120 },
+}
+W.SOUND_ORDER = { "raid", "boss", "ready", "bgReady", "alarm", "alarmB", "alarmC", "whisper", "invite", "ping",
+    "questFail", "levelUp", "auction", "coins" }
+W.SOUND_CATS = { "Class", "Expiring", "Food", "Flask", "Weapon", "Ammo" }   -- db key: "sound" .. cat
+
+-- the category of a warning, from its stable key
+local function category(key)
+    key = tostring(key or "")
+    if key:find("^class") then return "Class" end
+    if key:find("^exp") then return "Expiring" end
+    return ({ food = "Food", flask = "Flask", weapon = "Weapon", ammo = "Ammo" })[key]
+end
+
+function W.PlaySound(choice)
+    local s = W.SOUNDS[choice or ""]
+    if not s or not PlaySound then return end
+    local id = (s[1] and SOUNDKIT and SOUNDKIT[s[1]]) or s[2]
+    pcall(PlaySound, id, "Master")
+end
+
 function W:Show(list)
     local fr = frames()
     local split = { buffs = {}, cons = {} }
@@ -548,9 +577,19 @@ function W:Show(list)
     end
     showGroup(fr.buffs, split.buffs)
     showGroup(fr.cons, split.cons)
-    if not self.moving and #list > (self.count or 0) and db().sound and PlaySound then
-        PlaySound(SOUNDKIT and SOUNDKIT.RAID_WARNING or 8959)
+    -- new warnings: each one's category sound, every sound once
+    local seen, played = {}, {}
+    for _, w in ipairs(list) do
+        local key = w[4] or w[2]
+        seen[key] = true
+        if not self.moving and not (self.seen or {})[key] then
+            local cat = category(w[4])
+            local snd = cat and db()["sound" .. cat]
+            if snd and snd ~= "none" and not played[snd] then played[snd] = true; W.PlaySound(snd) end
+        end
     end
+    -- while moving the samples show: they must not count as known when the real warnings come back
+    if not self.moving then self.seen = seen end
     self.count = #list
 end
 
@@ -624,6 +663,11 @@ function W:Update()
 end
 
 ns.OnLogin(function()
+    -- the one sound switch of before: on became the raid warning for every kind
+    local d = db()
+    for _, cat in ipairs(W.SOUND_CATS) do
+        if d["sound" .. cat] == nil then d["sound" .. cat] = d.sound and "raid" or "none" end
+    end
     C_Timer.NewTicker(2, function() ns.Debug.Call("Warnings", W.Update, W) end)
     local function afterLoading()
         W.readyAt = GetTime() + 3

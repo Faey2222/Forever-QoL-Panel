@@ -36,6 +36,8 @@ UI.NEED = {
     xptext = { function() return ns.db.panel.xpText end, "OPT_XPTEXT" },
     lootopt = { function() return ns.db.lootopt.enabled end, "SEC_LOOTOPT" },
     btnrange = { function() return ns.db.buttons.range end, "OPT_BTN_RANGE" },
+    cbtarget = { function() return ns.db.castbar.target == "free" end, "PLACE_FREE" },
+    cbfocus = { function() return ns.db.castbar.focus == "free" end, "PLACE_FREE" },
     btncd = { function() return ns.db.buttons.cd end, "OPT_BTN_CD" },
     repbar = { function() return ns.db.panel.enabled and ns.db.panel.repBar end, "OPT_REPBAR" },
     repfree = { function() return ns.db.panel.repPlace == "free" end, "PLACE_FREE" },
@@ -44,6 +46,10 @@ UI.NEED = {
     hunter = { function() return select(2, UnitClass("player")) == "HUNTER" end, "NEED_HUNTER" },
     warlock = { function() return select(2, UnitClass("player")) == "WARLOCK" end, "NEED_WARLOCK" },
     flask = { function() return ns.db.warnings.flask end, "OPT_WARN_FLASK" },
+    wclass = { function() return ns.db.warnings.classBuffs end, "OPT_WARN_CLASS" },
+    wexpiring = { function() return ns.db.warnings.expiring end, "OPT_WARN_EXPIRING" },
+    wweapon = { function() return ns.db.warnings.weapon end, "OPT_WARN_WEAPON" },
+    ammo = { function() return ns.db.warnings.ammo end, "OPT_WARN_AMMO" },
     lootText = { function() return ns.db.gameplay.lootText end, "OPT_GP_LOOTTEXT" },
 }
 

@@ -27,6 +27,7 @@ Beasts.lua
 WeightData.lua
 LootOpt.lua
 Mover.lua
+CastBar.lua
 Dock.lua
 UI.lua
 Options.lua

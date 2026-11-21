@@ -2,7 +2,7 @@ local ADDON, ns = ...
 
 ns.name = ADDON
 ns.title = "Forever QoL Panel"
-ns.VERSION = "1.5.2"   -- the setup wizard shows the pages of features newer than the last version seen
+ns.VERSION = "1.6.0"   -- the setup wizard shows the pages of features newer than the last version seen
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\media\\"
 
 function ns.Tex(name)
@@ -170,6 +170,8 @@ ns.defaults = {
     minimap = { show = true, angle = 205, keep = {}, floating = true },   -- floating: collector button without panel
     actionbar = { enabled = true, placeNew = true, replaceRanks = true, general = false, messages = true, seen = {} },
     layout = { grid = true, snap = true, gridSize = 32 },   -- move mode (Mover.lua)
+    -- cast bars of target and focus (CastBar.lua): default, hide or free; targetPos / focusPos when free
+    castbar = { target = "default", focus = "default", targetScale = 1, focusScale = 1 },
     -- action buttons (ButtonState.lua): state colours and cooldown numbers
     buttons = { range = true, colors = { range = { 1, 0.15, 0.15 }, mana = { 0.35, 0.5, 1 }, unusable = { 0.4, 0.4, 0.4 } },
         cd = true, cdSize = 16, cdOutline = "OUTLINE", cdShadow = true, cdMin = 2, cdShort = 5, cdDecimals = false,
@@ -323,6 +325,7 @@ function ns.Refresh()
     if ns.Warnings and ns.Warnings.ApplyLook then ns.Warnings:ApplyLook() end
     if ns.Gameplay and ns.Gameplay.ApplyLootLook then ns.Gameplay:ApplyLootLook() end
     if ns.ButtonState then ns.ButtonState:Refresh() end
+    if ns.CastBar then ns.CastBar:Refresh() end
 end
 
 ns.On("ADDON_LOADED", function(_, name)

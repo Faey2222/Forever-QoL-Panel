@@ -19,6 +19,7 @@ local nameplates, warnings, tooltip, root = db("nameplates"), db("warnings"), db
 local layout = db("layout")
 local lootopt = db("lootopt")
 local btns = db("buttons")
+local castbar = db("castbar")
 -- a colour setting: tbl()[key] = { r, g, b }
 local function color(label, tip, tbl, key, needs)
     return { type = "color", label = label, tip = tip, needs = needs,
@@ -309,6 +310,22 @@ local PAGES = {
             color(L.BTN_COL_SHORT, nil, cdColors, "short", C),
         }
     end },
+    -- cast bars of target and focus
+    { group = "NAV_INTERFACE", icon = "Interface\\Icons\\Spell_Holy_MagicalSentry", title = "SEC_CASTBAR", build = function()
+        local list = { { type = "text", label = L.CB_TIP } }
+        local modes = { { "default", L.CB_DEFAULT }, { "hide", L.CB_HIDE }, { "free", L.PLACE_FREE } }
+        for _, def in ipairs(ns.CastBar.BARS) do
+            if def.key == "target" or ns.CastBar.Has(def.key) then
+                local key = def.key
+                list[#list + 1] = header(L[def.label])
+                list[#list + 1] = choice(L.OPT_CB_MODE, nil, castbar, key, modes)
+                list[#list + 1] = slider(L.OPT_CB_SCALE, nil, key .. "Scale", 0.5, 2, 0.05, "x", { "cb" .. key }, castbar, true)
+                list[#list + 1] = buttons(L.OPT_POS_RESET, nil, { { L.OPT_WARN_MOVE_BTN, function() ns.Mover:Toggle(true) end },
+                    { L.OPT_WARN_RESET_BTN, function() ns.db.castbar[key .. "Pos"] = nil; ns.Refresh() end } }, { "cb" .. key })
+            end
+        end
+        return list
+    end },
     { group = "NAV_INTERFACE", icon = "Interface\\Icons\\INV_Misc_Map_01", title = "WZ_MINIMAP", build = function()
         return {
             { type = "text", label = L.WZ_MINIMAP_TEXT },
@@ -402,21 +419,32 @@ local PAGES = {
     { group = "NAV_NOTICES", icon = "Interface\\Icons\\Ability_Warrior_BattleShout", title = "SEC_WARNINGS",
         master = { warnings, "enabled", tip = "OPT_WARNINGS_TIP" }, build = function()
         local Wd = { "warnings" }
+        local sounds = { { "none", L.NONE } }
+        for _, k in ipairs(ns.Warnings.SOUND_ORDER) do sounds[#sounds + 1] = { k, L["SND_" .. k:upper()] } end
+        local function sound(cat, need)
+            return choice(L.OPT_WARN_SOUND_CAT, L.OPT_WARN_SOUND_TIP, warnings, "sound" .. cat, sounds, need,
+                function() ns.Warnings.PlaySound(ns.db.warnings["sound" .. cat]) end, true)
+        end
         return {
             header(L.WARN_GROUP_BUFFS),
             check(L.OPT_WARN_CLASS, nil, warnings, "classBuffs", Wd),
+            sound("Class", { "warnings", "wclass" }),
             check(L.OPT_WARN_EXPIRING, nil, warnings, "expiring", Wd),
+            sound("Expiring", { "warnings", "wexpiring" }),
             header(L.WARN_GROUP_CONS),
             check(L.OPT_WARN_FOOD, L.OPT_WARN_FOOD_TIP, warnings, "food", Wd),
             choice(L.OPT_WARN_WHERE, nil, warnings, "foodWhere", WHERE_FOOD(), { "warnings", "food" }, nil, true),
+            sound("Food", { "warnings", "food" }),
             check(L.OPT_WARN_FLASK, L.OPT_WARN_FLASK_TIP, warnings, "flask", Wd),
             choice(L.OPT_WARN_WHERE, nil, warnings, "flaskWhere", WHERE_FLASK(), { "warnings", "flask" }, nil, true),
+            sound("Flask", { "warnings", "flask" }),
             check(L.OPT_WARN_WEAPON, L.OPT_WARN_WEAPON_TIP, warnings, "weapon", Wd),
+            sound("Weapon", { "warnings", "wweapon" }),
             check(L.OPT_WARN_AMMO, L.OPT_WARN_AMMO_TIP, warnings, "ammo", { "warnings", "hunter" }),
             slider(L.OPT_WARN_AMMO_MIN, L.OPT_WARN_AMMO_MIN_TIP, "ammoMin", 100, 800, 50, "", { "warnings", "ammo", "hunter" }, warnings, true),
+            sound("Ammo", { "warnings", "ammo", "hunter" }),
             header(L.SEC_BEHAVIOUR),
             check(L.OPT_WARN_COMBAT, L.OPT_WARN_COMBAT_TIP, warnings, "combat", Wd),
-            check(L.OPT_WARN_SOUND, nil, warnings, "sound", Wd),
             check(L.OPT_WARN_WINDOWS, L.OPT_WARN_WINDOWS_TIP, warnings, "hideWithWindows", Wd),
             check(L.OPT_WARN_RESTING, L.OPT_WARN_RESTING_TIP, warnings, "hideResting", Wd),
             choice(L.OPT_WARN_ANIM, L.OPT_WARN_ANIM_TIP, warnings, "anim", { { "pulse", L.ANIM_PULSE }, { "bounce", L.ANIM_BOUNCE },

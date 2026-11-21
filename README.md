@@ -7,7 +7,7 @@ An all-in-one quality-of-life addon for World of Warcraft: Forever, designed to 
 - Action bars: new spells and higher ranks placed automatically
 - Quest markers on nameplates
 - Gameplay helpers: auto quests, most valuable reward marked, sell grey items, repair, fast loot, loot text
-- Buff and consumable warnings
+- Buff and consumable warnings, each kind with its own warning sound
 - Tooltip extras: sell value, item counts per character, gathering skill
 - Own options window with search and a setup wizard
 

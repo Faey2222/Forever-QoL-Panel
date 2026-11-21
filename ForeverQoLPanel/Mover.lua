@@ -163,11 +163,18 @@ local function toolbar()
     bar:SetPoint("TOP", UIParent, "TOP", 0, -90)
     bar:SetFrameStrata("FULLSCREEN_DIALOG")
     bar:EnableMouse(true)
-    if bar.SetBackdrop then
-        bar:SetBackdrop({ bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
-            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 24,
-            insets = { left = 6, right = 6, top = 6, bottom = 6 } })
-    end
+    -- draggable itself, so nothing below it stays out of reach; the place is kept
+    bar:SetMovable(true)
+    bar:SetClampedToScreen(true)
+    bar:RegisterForDrag("LeftButton")
+    bar:SetScript("OnDragStart", bar.StartMoving)
+    bar:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        local l, t = self:GetLeft(), self:GetTop()
+        if l and t then db().barPos = { l, t - UIParent:GetHeight() } end
+    end)
+    -- the panel's look (UI.Skin), as the loot optimizer's windows
+    bar:SetScript("OnSizeChanged", function(self) ns.UI.Skin(self) end)
     bar.title = bar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     bar.title:SetPoint("TOPLEFT", 16, -12)
     bar.hint = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -230,6 +237,11 @@ end
 
 function M:UpdateBar()
     local b = toolbar()
+    local pos = db().barPos
+    b:ClearAllPoints()
+    if pos then b:SetPoint("TOPLEFT", UIParent, "TOPLEFT", pos[1], pos[2])
+    else b:SetPoint("TOP", UIParent, "TOP", 0, -90) end
+    ns.UI.Skin(b)
     b.title:SetText(ns.title .. ": " .. L().MOVE_TITLE)
     b.hint:SetText(L().MOVE_HINT)
     b.grid.text:SetText(L().MOVE_GRID)

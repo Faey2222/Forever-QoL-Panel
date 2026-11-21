@@ -592,15 +592,13 @@ local function itemRow(parent)
     function r:Set(link, sub, fallback)
         self.link = link
         local i = link and info(link)
-        local icon, name, quality = i and i.icon, i and i.name, i and i.quality
-        if link and not i then
-            fallback = fallback or {}
-            local id = tonumber(link:match("item:(%d+)"))
-            icon = fallback.icon or (id and C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(id))
-            name = fallback.name or link:match("%[(.-)%]")
-            quality = fallback.quality
-            if id and C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(id) end
-        end
+        fallback = fallback or {}
+        -- each part from the item data, else from what the loot window knows, else from the link itself
+        local id = link and tonumber(link:match("item:(%d+)"))
+        local icon = (i and i.icon) or fallback.icon or (id and C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(id))
+        local name = (i and i.name) or fallback.name or (link and link:match("%[(.-)%]"))
+        local quality = (i and i.quality) or fallback.quality
+        if link and not i and id and C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(id) end
         self.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
         local c = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
         self.name:SetText(name or L().LO_NOTHING)
@@ -898,17 +896,32 @@ function LO:Candidates()
     return list, missing
 end
 
--- the first loot item still lying there, with its value
+-- the first loot item still lying there, with its value. Only real items count (no coins, no currencies, nothing the
+-- game keeps secret); what each slot held is kept in the debug data.
+local LOOT_ITEM = (Enum and Enum.LootSlotType and Enum.LootSlotType.Item) or LOOT_SLOT_ITEM or 1
+local function plainStr(v) return type(v) == "string" and not ns.Secret(v) and v or nil end
+local function plainNum(v) return type(v) == "number" and not ns.Secret(v) and v or nil end
+local function describe(v) if ns.Secret(v) then return "secret" end return tostring(v) end
 local function pendingLoot()
-    for i = 1, (GetNumLootItems and GetNumLootItems() or 0) do
-        local link = GetLootSlotLink and GetLootSlotLink(i)
-        if link then
-            local tex, name, count, _, quality = GetLootSlotInfo(i)
+    local seen = {}
+    local found
+    for i = 1, (plainNum(GetNumLootItems and GetNumLootItems()) or 0) do
+        local kind = GetLootSlotType and GetLootSlotType(i)
+        local rawLink = GetLootSlotLink and GetLootSlotLink(i)
+        local tex, name, count, quality, _
+        if GetLootSlotInfo then tex, name, count, _, quality = GetLootSlotInfo(i) end
+        seen[#seen + 1] = { slot = i, kind = describe(kind), link = describe(rawLink), name = describe(name), count = describe(count) }
+        local link = plainStr(rawLink)
+        local isItem = plainNum(kind) == nil or kind == LOOT_ITEM
+        if not found and link and isItem and link:find("item:") then
             local inf = info(link)
-            local value = inf and (inf.sellPrice or 0) * (count or 1) or nil
-            return link, value, i, { icon = tex, name = name, quality = quality }
+            local n = plainNum(count) or 1
+            local value = inf and plainNum(inf.sellPrice) and inf.sellPrice * n or nil
+            found = { link, value, i, { icon = plainStr(tex) or plainNum(tex), name = plainStr(name), quality = plainNum(quality) } }
         end
     end
+    ns.Debug.Set("lootSlots", seen)
+    if found then return found[1], found[2], found[3], found[4] end
 end
 
 function LO:FullFrame()
