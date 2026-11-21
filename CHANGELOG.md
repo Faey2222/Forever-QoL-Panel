@@ -1,4 +1,4 @@
-### Forever QoL Panel 1.7.0 – Minimap rings and a tidier options window
+### Forever QoL Panel 1.7.1 – Minimap rings and a tidier options window
 
 #### New
 - **XP and reputation around the minimap:** both bars can run as rings around the minimap, in the bar's look with its border, colours, tick marks and tooltip; all six looks of finished quests work on the ring. The reputation ring goes outside the XP ring (one shared border at 0 px). Width and distance adjustable for each
@@ -10,6 +10,7 @@
 - **Quest tooltip:** finished quests show their share of the level in percent
 
 #### Fixes
+- **What's new:** lists every new feature of this version with all its settings (1.7.0 showed only a few)
 - **Characters:** Forever's client no longer reports the realm name, so characters landed in a group without a realm (missing gold in the tooltip, no alts in the mail list); the realm is now found another way and the duplicates are merged
 - **Panel:** with no bar in the panel it can be brought back after folding
 

@@ -785,9 +785,9 @@ for i = 1, #ns.Options.PAGES do
         for _ = 1, 30 do ns.Wizard:Go(1) end
         assert(ForeverQoLPanelDB.wizard == ns.VERSION, "wizard not finished")
         ForeverQoLPanelDB.wizard = "0.1.0"; ns.Wizard:Open(false)
-        assert(#ns.Wizard.pages == 22, "update pages: " .. #ns.Wizard.pages)
+        assert(#ns.Wizard.pages == 24, "update pages: " .. #ns.Wizard.pages)
         for i = 1, 8 do ns.Wizard:Jump(i) end
-        ns.Wizard:OpenNews(); assert(#ns.Wizard.pages == 4 and ns.Wizard.pages[2].id == "minimapring" and ns.Wizard.pages[4].id == "newelements", "news pages: " .. #ns.Wizard.pages)
+        ns.Wizard:OpenNews(); assert(#ns.Wizard.pages == 6 and ns.Wizard.pages[2].id == "minimapring" and ns.Wizard.pages[6].id == "optionstabs", "news pages: " .. #ns.Wizard.pages)
         ns.Wizard.frame.tiles[1]:GetScript("OnClick")(ns.Wizard.frame.tiles[1])
         ns.Wizard:Finish()
         SlashCmdList.FOREVERQOLPANEL("reset")

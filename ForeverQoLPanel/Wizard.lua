@@ -18,6 +18,8 @@ local function mm() return ns.db.minimap end
 local function lo() return ns.db.lootopt end
 local function btn() return ns.db.buttons end
 local function cb() return ns.db.castbar end
+local function popt() return ns.db.panel.opt end
+local RINGW = { { "thin", "RING_THIN" }, { "medium", "RING_MEDIUM" }, { "wide", "RING_WIDE" } }
 -- a few of the warning sounds for the news page (all of them are in the options)
 local SOUNDS = { { "none", "NONE" }, { "raid", "SND_RAID" }, { "boss", "SND_BOSS" }, { "ready", "SND_READY" },
     { "bgReady", "SND_BGREADY" }, { "alarm", "SND_ALARM" } }
@@ -133,19 +135,39 @@ local PAGES = {
         { "choice", "OPT_WARN_FLASK", wn, "soundFlask", SOUNDS },
         { "choice", "OPT_WARN_AMMO", wn, "soundAmmo", SOUNDS, class = "HUNTER" },
     } },
-    { id = "minimapring", icon = "Interface\\Icons\\Spell_Holy_SurgeOfLight", since = "1.7.0", title = "WZ_RING", text = "WZ_RING_TEXT", controls = {
-        { "choice", "OPT_XP_PLACE", panel, "xpPlace", { { "panel", "PLACE_PANEL" }, { "free", "PLACE_FREE" }, { "minimap", "PLACE_MINIMAP" } } },
-        { "choice", "OPT_REP_PLACE", panel, "repPlace", { { "attach", "REP_ATTACH" }, { "below", "REP_BELOW" }, { "free", "PLACE_FREE" }, { "minimap", "PLACE_MINIMAP" } } },
+    -- 1.7.1: every new feature of 1.7.0 with all its settings (1.7.0 listed only a few)
+    { id = "minimapring", icon = "Interface\\Icons\\Spell_Holy_SurgeOfLight", since = "1.7.1", title = "WZ_RING", text = "WZ_RING_TEXT", controls = {
+        { "choice", "WZ_XP_WHERE", panel, "xpPlace", { { "panel", "PLACE_PANEL" }, { "free", "PLACE_FREE" }, { "minimap", "PLACE_MINIMAP" } } },
+        { "choice", "WZ_XP_RINGW", panel, "ringWidth", RINGW },
+        { "slider", "WZ_XP_RINGG", panel, "ringGap", min = 0, max = 20, step = 1, suffix = " px" },
+        { "choice", "WZ_REP_WHERE", panel, "repPlace", { { "attach", "REP_ATTACH" }, { "below", "REP_BELOW" }, { "free", "PLACE_FREE" }, { "minimap", "PLACE_MINIMAP" } } },
+        { "choice", "WZ_REP_RINGW", panel, "repRingWidth", RINGW },
+        { "slider", "WZ_REP_RINGG", panel, "repRingGap", min = 0, max = 20, step = 1, suffix = " px" },
     } },
-    { id = "minimapshape", icon = "Interface\\Icons\\INV_Misc_Map_01", since = "1.7.0", title = "WZ_MINIMAP", text = "WZ_MMSHAPE_TEXT", controls = {
+    { id = "minimapshape", icon = "Interface\\Icons\\INV_Misc_Map_01", since = "1.7.1", title = "WZ_MINIMAP", text = "WZ_MMSHAPE_TEXT", controls = {
         { "choice", "OPT_MM_SHAPE", mm, "shape", { { "round", "MM_ROUND" }, { "square", "MM_SQUARE" } } },
         { "choice", "OPT_MM_LOOK", mm, "look", { { "classic", "SKIN_CLASSIC" }, { "modern", "SKIN_MODERN" } } },
+    } },
+    { id = "minimapelements", icon = "Interface\\Icons\\INV_Misc_Spyglass_02", since = "1.7.1", title = "SEC_MM_SHOW", text = "WZ_MMEL_TEXT", controls = {
+        { "check", "OPT_MM_ZONE", mm, "zone" },
+        { "check", "OPT_MM_CLOCK", popt, "minimapClock" },
         { "check", "OPT_MM_CALENDAR", mm, "calendar" },
+        { "check", "OPT_MM_TRACKING", mm, "tracking" },
+        { "check", "OPT_MM_ADDONS", mm, "addons" },
         { "check", "OPT_MM_COORDS", mm, "coords" },
     } },
-    { id = "newelements", icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", since = "1.7.0", title = "WZ_NEWEL", text = "WZ_NEWEL_TEXT", controls = {
+    { id = "newelements", icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", since = "1.7.1", title = "WZ_NEWEL", text = "WZ_NEWEL_TEXT", controls = {
         { "check", "ITEM_tracking", items, "tracking" },
+        { "check", "OPT_TRACKING_ICON", popt, "trackingIconOnly" },
         { "check", "ITEM_wim", items, "wim" },
+        { "check", "OPT_WIM_HIDE_BTN", popt, "wimHideButton" },
+        { "check", "OPT_HIDE_EMPTY_WIM", popt, "wimHideEmpty" },
+        { "check", "OPT_HIDE_EMPTY_MAIL", popt, "mailHideEmpty" },
+    } },
+    { id = "optionstabs", icon = "Interface\\Icons\\INV_Misc_Book_09", since = "1.7.1", title = "WZ_MORE", text = "WZ_MORE_TEXT", controls = {
+        { "check", "OPT_DONE", panel, "questPreview" },
+        { "choice", "OPT_QSTYLE", panel, "questStyle", { { "veil", "QSTYLE_VEIL" }, { "frame", "QSTYLE_FRAME" }, { "line", "QSTYLE_LINE" },
+            { "glow", "QSTYLE_GLOW" }, { "shimmer", "QSTYLE_SHIMMER" }, { "stripes", "QSTYLE_STRIPES" } } },
     } },
     { id = "beastpet", icon = "Interface\\Icons\\Ability_Hunter_BeastTraining", since = "1.4.0", title = "WZ_BEASTPET", text = "WZ_BEASTPET_TEXT", controls = {
         { "check", "OPT_TT_BEASTS", tt, "beasts", class = "HUNTER" },
