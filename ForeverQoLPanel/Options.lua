@@ -145,7 +145,7 @@ local PAGES = {
     -- the characters the addon knows; ones that no longer exist can be removed (gold overview, mail list ...)
     { group = "NAV_GENERAL", icon = "Interface\\Icons\\INV_Misc_GroupNeedMore", title = "SEC_CHARS", build = function()
         local list = { { type = "text", label = L.CHARS_TIP } }
-        local me, myRealm = UnitName("player"), GetRealmName()
+        local me, myRealm = UnitName("player"), ns.Realm()
         local lastRealm
         for _, c in ipairs(ns.Characters()) do
             local realm, faction, name, e = c[1], c[2], c[3], c[4]
@@ -157,7 +157,8 @@ local PAGES = {
             local tip = (FACTION_ALLIANCE and faction == "Alliance" and FACTION_ALLIANCE)
                 or (FACTION_HORDE and faction == "Horde" and FACTION_HORDE) or faction
             if name == me and realm == myRealm then
-                list[#list + 1] = { type = "text", label = label .. "  |cff9d9d9d(" .. L.CHARS_YOU .. ")|r" }
+                -- a row without a button, so it stays in its realm's card
+                list[#list + 1] = buttons(label .. "  |cff9d9d9d(" .. L.CHARS_YOU .. ")|r", tip, {})
             else
                 list[#list + 1] = buttons(label, tip, { { L.CHARS_REMOVE, function()
                     ns.RemoveCharacter(realm, faction, name)
@@ -199,7 +200,7 @@ local PAGES = {
                 { { L.OPT_TEST_WIDTH_BTN, function() ns.Elements:TestWidths() end } }, P) or nil,
         }
     end },
-    { group = "NAV_INTERFACE", icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", title = "SEC_ELEMENTS",
+    { group = "NAV_INTERFACE", icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", title = "SEC_ELEMENTS", tabsByHeader = true,
         off = function() return not ns.db.panel.enabled end, build = function()
         -- every element with its own settings right below it (indented, greyed while the element is off)
         local SUB = {
@@ -207,6 +208,9 @@ local PAGES = {
             xph = { { "xphTime", L.OPT_XPH_TIME, L.OPT_XPH_TIME_TIP } },
             clock = { { "serverTime", L.OPT_SERVER_TIME }, { "minimapClock", L.OPT_MM_CLOCK, nil, true } },
             addons = { { "addonsIconOnly", L.OPT_ADDONS_ICON } },
+            tracking = { { "trackingIconOnly", L.OPT_TRACKING_ICON } },
+            wim = { { "wimHideButton", L.OPT_WIM_HIDE_BTN, L.OPT_WIM_HIDE_BTN_TIP }, { "wimHideEmpty", L.OPT_HIDE_EMPTY_WIM } },
+            mail = { { "mailHideEmpty", L.OPT_HIDE_EMPTY_MAIL } },
         }
         local items = function() return ns.db.panel.items end
         -- one card per theme; elements of other classes (ammo, soul shards) are left out
@@ -224,14 +228,20 @@ local PAGES = {
         end
         return list
     end },
-    { group = "NAV_INTERFACE", icon = "Interface\\Icons\\Spell_Holy_SurgeOfLight", title = "SEC_XPBAR",
+    -- XP and reputation bar: one page, a tab each
+    { group = "NAV_INTERFACE", icon = "Interface\\Icons\\Spell_Holy_SurgeOfLight", title = "SEC_BARS", tabs = {
+    { title = "SEC_XPBAR",
         master = { panel, "xpbar", tip = "OPT_XPBAR_TIP", needs = { "panel" } }, build = function()
         local X = { "xpbar" }
         local ticks = { { 0, L.NONE } }
         for _, n in ipairs({ 5, 10, 20, 25 }) do ticks[#ticks + 1] = { n, L.TICKS_N:format(n) } end
         return {
             header(L.SEC_LAYOUT),
-            choice(L.OPT_XP_PLACE, L.OPT_XP_PLACE_TIP, panel, "xpPlace", { { "panel", L.PLACE_PANEL }, { "free", L.PLACE_FREE } }, X),
+            choice(L.OPT_XP_PLACE, L.OPT_XP_PLACE_TIP, panel, "xpPlace", { { "panel", L.PLACE_PANEL }, { "free", L.PLACE_FREE },
+                { "minimap", L.PLACE_MINIMAP } }, X),
+            choice(L.OPT_RING_WIDTH, nil, panel, "ringWidth", { { "thin", L.RING_THIN }, { "medium", L.RING_MEDIUM },
+                { "wide", L.RING_WIDE } }, { "xpbar", "xpring" }, nil, true),
+            slider(L.OPT_RING_GAP, L.OPT_RING_GAP_TIP, "ringGap", 0, 20, 1, " px", { "xpbar", "xpring" }, nil, true),
             buttons(L.OPT_POS_RESET, nil, { { L.OPT_WARN_MOVE_BTN, function() ns.Mover:Toggle(true) end },
                 { L.OPT_WARN_RESET_BTN, function() ns.db.panel.xpPos = nil; ns.Refresh() end } }, { "xpbar", "xpfree" }),
             choice(L.OPT_STYLE, L.OPT_STYLE_TIP, panel, "style", { { "edge", L.STYLE_EDGE }, { "rail", L.STYLE_RAIL } }, X),
@@ -239,15 +249,15 @@ local PAGES = {
             slider(L.OPT_WIDTH, L.OPT_WIDTH_TIP, "barWidth", 200, 2000, 10, " px", X),
             choice(L.OPT_TICKS, nil, panel, "ticks", ticks, X),
             header(L.SEC_XPTEXT),
-            check(L.OPT_XPTEXT, L.OPT_XPTEXT_TIP, panel, "xpText", X),
-            check(L.OPT_XPTEXT_VALUES, nil, panel, "xpTextValues", { "xpbar", "xptext" }, { indent = true }),
-            check(L.OPT_XPTEXT_PERCENT, nil, panel, "xpTextPercent", { "xpbar", "xptext" }, { indent = true }),
-            check(L.OPT_XPTEXT_TIME, L.OPT_XPTEXT_TIME_TIP, panel, "xpTextTime", { "xpbar", "xptext" }, { indent = true }),
-            check(L.OPT_XPTEXT_RESTED, nil, panel, "xpTextRested", { "xpbar", "xptext" }, { indent = true }),
+            check(L.OPT_XPTEXT, L.OPT_XPTEXT_TIP, panel, "xpText", { "xpbar", "xpnotring" }),
+            check(L.OPT_XPTEXT_VALUES, nil, panel, "xpTextValues", { "xpbar", "xptext", "xpnotring" }, { indent = true }),
+            check(L.OPT_XPTEXT_PERCENT, nil, panel, "xpTextPercent", { "xpbar", "xptext", "xpnotring" }, { indent = true }),
+            check(L.OPT_XPTEXT_TIME, L.OPT_XPTEXT_TIME_TIP, panel, "xpTextTime", { "xpbar", "xptext", "xpnotring" }, { indent = true }),
+            check(L.OPT_XPTEXT_RESTED, nil, panel, "xpTextRested", { "xpbar", "xptext", "xpnotring" }, { indent = true }),
             choice(L.OPT_XPTEXT_POS, L.OPT_XPTEXT_POS_TIP, panel, "xpTextPos", { { "on", L.XPTEXT_ON }, { "below", L.XPTEXT_BELOW } },
-                { "xpbar", "xptext" }, nil, true),
-            slider(L.OPT_XPTEXT_SIZE, nil, "xpTextSize", 8, 16, 1, " pt", { "xpbar", "xptext" }, panel, true),
-            slider(L.OPT_XPTEXT_GAP, L.OPT_XPTEXT_GAP_TIP, "xpTextGap", 1, 6, 1, "", { "xpbar", "xptext" }, panel, true),
+                { "xpbar", "xptext", "xpnotring" }, nil, true),
+            slider(L.OPT_XPTEXT_SIZE, nil, "xpTextSize", 8, 16, 1, " pt", { "xpbar", "xptext", "xpnotring" }, panel, true),
+            slider(L.OPT_XPTEXT_GAP, L.OPT_XPTEXT_GAP_TIP, "xpTextGap", 1, 6, 1, "", { "xpbar", "xptext", "xpnotring" }, panel, true),
             header(L.SEC_PREVIEW),
             check(L.OPT_DONE, L.OPT_DONE_TIP, panel, "questPreview", X),
             choice(L.OPT_QSTYLE, L.OPT_QSTYLE_TIP, panel, "questStyle", { { "veil", L.QSTYLE_VEIL }, { "frame", L.QSTYLE_FRAME },
@@ -259,7 +269,7 @@ local PAGES = {
             check(L.OPT_HIDE_BLIZZ, L.OPT_HIDE_BLIZZ_TIP, panel, "hideBlizzardXP", X),
         }
     end },
-    { group = "NAV_INTERFACE", icon = "Interface\\Icons\\INV_Misc_Note_02", title = "SEC_REP",
+    { title = "SEC_REP",
         master = { panel, "repBar", tip = "OPT_REPBAR_TIP", needs = { "panel" } }, build = function()
         local R, T = { "repbar" }, { "repbar", "reptext" }
         local ticks = { { 0, L.NONE } }
@@ -267,7 +277,10 @@ local PAGES = {
         return {
             header(L.SEC_LAYOUT),
             choice(L.OPT_REP_PLACE, L.OPT_REP_PLACE_TIP, panel, "repPlace", { { "attach", L.REP_ATTACH },
-                { "below", L.REP_BELOW }, { "free", L.PLACE_FREE } }, R),
+                { "below", L.REP_BELOW }, { "free", L.PLACE_FREE }, { "minimap", L.PLACE_MINIMAP } }, R),
+            choice(L.OPT_RING_WIDTH, nil, panel, "repRingWidth", { { "thin", L.RING_THIN }, { "medium", L.RING_MEDIUM },
+                { "wide", L.RING_WIDE } }, { "repbar", "repring" }, nil, true),
+            slider(L.OPT_RING_GAP, L.OPT_REP_RING_GAP_TIP, "repRingGap", 0, 20, 1, " px", { "repbar", "repring" }, nil, true),
             buttons(L.OPT_POS_RESET, nil, { { L.OPT_WARN_MOVE_BTN, function() ns.Mover:Toggle(true) end },
                 { L.OPT_WARN_RESET_BTN, function() ns.db.panel.repPos = nil; ns.Refresh() end } }, { "repbar", "repfree" }),
             slider(L.OPT_REP_WIDTH, L.OPT_REP_WIDTH_TIP, "repWidth", 50, 100, 5, " %", R),
@@ -283,6 +296,7 @@ local PAGES = {
             slider(L.OPT_XPTEXT_SIZE, nil, "repTextSize", 7, 14, 1, " pt", T, panel, true),
         }
     end },
+    } },
     -- action buttons: state colours and cooldown numbers
     { group = "NAV_INTERFACE", icon = "Interface\\Icons\\Ability_Marksmanship", title = "SEC_BUTTONS", build = function()
         local colors = function() return ns.db.buttons.colors end
@@ -328,6 +342,18 @@ local PAGES = {
     end },
     { group = "NAV_INTERFACE", icon = "Interface\\Icons\\INV_Misc_Map_01", title = "WZ_MINIMAP", build = function()
         return {
+            header(L.SEC_MM_SHAPE),
+            choice(L.OPT_MM_SHAPE, L.OPT_MM_SHAPE_TIP, minimap, "shape", { { "round", L.MM_ROUND }, { "square", L.MM_SQUARE } }),
+            choice(L.OPT_MM_LOOK, L.OPT_MM_LOOK_TIP, minimap, "look", { { "classic", L.SKIN_CLASSIC }, { "modern", L.SKIN_MODERN } },
+                { "mmsquare" }, nil, true),
+            header(L.SEC_MM_SHOW),
+            check(L.OPT_MM_ZONE, L.OPT_MM_SHOW_TIP, minimap, "zone"),
+            check(L.OPT_MM_CLOCK, L.OPT_MM_SHOW_TIP, opts, "minimapClock"),
+            check(L.OPT_MM_CALENDAR, L.OPT_MM_SHOW_TIP, minimap, "calendar"),
+            check(L.OPT_MM_TRACKING, L.OPT_MM_SHOW_TIP, minimap, "tracking"),
+            check(L.OPT_MM_ADDONS, L.OPT_MM_SHOW_TIP, minimap, "addons"),
+            check(L.OPT_MM_COORDS, L.OPT_MM_SHOW_TIP, minimap, "coords"),
+            header(L.SEC_MM_BUTTONS),
             { type = "text", label = L.WZ_MINIMAP_TEXT },
             check(L.OPT_COLLECT, L.OPT_COLLECT_TIP, panel, "collectButtons", { "panel" }),
             check(L.OPT_FLOATING, L.OPT_FLOATING_TIP, minimap, "floating", { "noPanel" }),
@@ -350,7 +376,7 @@ local PAGES = {
             buttons(L.AB_BTN_PLACE, L.AB_BTN_PLACE_TIP, { { L.AB_BTN_RUN, function() ns.ActionBar:PlaceMissing() end } }),
         }
     end },
-    { group = "NAV_AUTOMATION", icon = "Interface\\Icons\\INV_Misc_Bag_10_Blue", title = "SEC_LOOTOPT",
+    { group = "NAV_AUTOMATION", icon = "Interface\\Icons\\INV_Misc_Bag_10_Blue", title = "SEC_LOOTOPT", tabsByHeader = true,
         master = { lootopt, "enabled", tip = "OPT_LOOTOPT_TIP" }, build = function()
         local O2 = { "lootopt" }
         local specs = { { "auto", L.LO_SPEC_AUTO } }
@@ -416,7 +442,7 @@ local PAGES = {
     end },
 
     -- Notices ----------------------------------------------------------------------------------------------------
-    { group = "NAV_NOTICES", icon = "Interface\\Icons\\Ability_Warrior_BattleShout", title = "SEC_WARNINGS",
+    { group = "NAV_NOTICES", icon = "Interface\\Icons\\Ability_Warrior_BattleShout", title = "SEC_WARNINGS", tabsByHeader = true,
         master = { warnings, "enabled", tip = "OPT_WARNINGS_TIP" }, build = function()
         local Wd = { "warnings" }
         local sounds = { { "none", L.NONE } }
@@ -509,7 +535,13 @@ local PAGES = {
 }
 O.PAGES = PAGES
 
-local function isOff(p)
+local isOff
+function isOff(p)
+    -- a page of tabs is off when every tab is
+    if p.tabs then
+        for _, t in ipairs(p.tabs) do if not isOff(t) then return false end end
+        return true
+    end
     if p.master then
         local missing = p.master.needs and ns.UI.Missing(p.master.needs)
         return missing ~= nil or not p.master[1]()[p.master[2]]
@@ -543,6 +575,22 @@ function O:Render(keepScroll)
         O:Show(map[n])
     end)
     if searching then return self:RenderSearch(keepScroll) end
+    -- a page of tabs: the chosen tab (kept per page) brings its switch and settings
+    local tabs
+    if page.tabs then
+        self.tabOf = self.tabOf or {}
+        local t = math.min(self.tabOf[self.index] or 1, #page.tabs)
+        local labels = {}
+        for n, tab in ipairs(page.tabs) do labels[n] = { title = L[tab.title], off = isOff(tab) } end
+        tabs = { items = labels, active = t, onClick = function(n)
+            O.tabOf[O.index] = n
+            O:Render()
+            f:FadeContent()
+        end }
+        local group = page.group
+        page = page.tabs[t]
+        page = setmetatable({ group = group, icon = page.icon or PAGES[self.index].icon, title = PAGES[self.index].title }, { __index = page })
+    end
     local toggle
     if page.master then
         local m = page.master
@@ -553,9 +601,32 @@ function O:Render(keepScroll)
                 .. (missing and ("\n|cffff8a6a" .. missing .. "|r") or ""),
             onChange = function() O:Render(true) end }
     end
-    f:SetHead(page.icon, L[page.title], L[page.group], nil, toggle)
+    f:SetHead(page.icon, L[page.title], L[page.group], nil, toggle, tabs)
     local scroll = keepScroll and f.scroll.GetVerticalScroll and f.scroll:GetVerticalScroll()
-    f:Render(O.Track(page.build()), function() O:Render(true) end)
+    local specs = page.build()
+    -- a long page split into tabs at its section headers (text before the first header shows on every tab)
+    if page.tabsByHeader then
+        local lead, parts = {}, {}
+        for _, s in ipairs(specs) do
+            if s.type == "header" then parts[#parts + 1] = { title = s.label, items = { s } }
+            elseif #parts == 0 then lead[#lead + 1] = s
+            else table.insert(parts[#parts].items, s) end
+        end
+        if #parts > 1 then
+            self.tabOf = self.tabOf or {}
+            local t = math.min(self.tabOf[self.index] or 1, #parts)
+            local labels = {}
+            for n, part in ipairs(parts) do labels[n] = { title = part.title } end
+            f:SetTabs({ items = labels, active = t, onClick = function(n)
+                O.tabOf[O.index] = n
+                O:Render()
+                f:FadeContent()
+            end })
+            specs = lead
+            for _, s in ipairs(parts[t].items) do specs[#specs + 1] = s end
+        end
+    end
+    f:Render(O.Track(specs), function() O:Render(true) end)
     if f.scroll.SetVerticalScroll then f.scroll:SetVerticalScroll(scroll or 0) end
 end
 
@@ -575,8 +646,19 @@ function O:RenderSearch(keepScroll)
     local words = {}
     for w in self.query:lower():gmatch("%S+") do words[#words + 1] = w end
     local list, count = {}, 0
+    -- tabs count as pages of their own, titled with page and tab
+    local all = {}
     for _, p in ipairs(PAGES) do
-        local title = L[p.title]
+        if p.tabs then
+            for _, t in ipairs(p.tabs) do
+                all[#all + 1] = setmetatable({ searchTitle = L[p.title] .. " – " .. L[t.title] }, { __index = t })
+            end
+        else
+            all[#all + 1] = p
+        end
+    end
+    for _, p in ipairs(all) do
+        local title = p.searchTitle or L[p.title]
         local whole = matches(title, words)
         local found = {}
         if whole and p.master then

@@ -26,7 +26,9 @@ local function itemAt(bag, slot)
 end
 
 local function me()
-    local realm = GetRealmName() or "?"
+    -- right after loading the realm may not be known yet: counted into a throwaway entry then
+    local realm = ns.Realm()
+    if not realm then return { bags = {}, bank = {} }, nil end
     local key = (UnitFactionGroup("player") or "?") .. ":" .. (UnitName("player") or "?")
     ns.db.items[realm] = ns.db.items[realm] or {}
     local c = ns.db.items[realm][key]

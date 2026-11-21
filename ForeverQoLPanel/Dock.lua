@@ -232,8 +232,8 @@ function Dock:Layout(W)
     local rail = p.style == "rail"
     local r = BAR / 2
     W = math.max(W, 2 * 96 + 40)
-    if not ns.Rep:Active() then ns.Rep:SetGeometry() end
-    local inPanel = p.xpPlace ~= "free" and self:StackMain() ~= nil
+    if not ns.Rep:Active() or self:RepMode() == "minimap" then ns.Rep:SetGeometry() end
+    local inPanel = self:XPPlace() ~= "free" and self:StackMain() ~= nil
 
     -- the XP bar has its own width; it never gets wider than the panel's straight line allows
     local minCx = rail and F + 12 or F
@@ -264,9 +264,9 @@ function Dock:Layout(W)
         self:HideSet(self.S)
     end
     self:LayoutHolders()
-    -- folded: in "edge" style the line (the bar's top border) leaves the screen; "rail" keeps the bar's border;
-    -- without a bar in the panel the whole panel leaves
-    self.folded = not inPanel and YP + 16 or rail and top - 4 or YP + 5
+    -- folded: in "edge" style the line (the bar's top border) stays at the screen edge; "rail" keeps the bar's border
+    -- (without a bar in the panel its line stays at the screen edge too: the mouse needs something to come back to)
+    self.folded = rail and inPanel and top - 4 or YP + 5
     self:SetOffset(self.open and (self.offset or 0) or self.folded)
 end
 
@@ -280,8 +280,8 @@ function Dock:LayoutModern(W)
     local tint = MBORDER[p.rim] or MBORDER.bronze
     local th = p.border or 2                                -- border thickness: 1, 2 or 3 units
     for _, t in ipairs({ self.fillL, self.fillR, self.fillM, self.capL, self.capR, self.edge }) do t:Hide() end
-    if not ns.Rep:Active() then ns.Rep:SetGeometry() end
-    local inPanel = p.xpPlace ~= "free" and self:StackMain() ~= nil
+    if not ns.Rep:Active() or self:RepMode() == "minimap" then ns.Rep:SetGeometry() end
+    local inPanel = self:XPPlace() ~= "free" and self:StackMain() ~= nil
 
     local bw = math.min(p.barWidth, W - 2 * MSIDE)
     local x0 = math.floor((W - bw) / 2 + 0.5)
@@ -300,7 +300,7 @@ function Dock:LayoutModern(W)
         self:HideSet(self.S)
     end
     self:LayoutHolders()
-    self.folded = not inPanel and MPH + 8 or rail and top - th or MPH
+    self.folded = rail and inPanel and top - th or MPH
     self:SetOffset(self.open and (self.offset or 0) or self.folded)
 end
 
@@ -334,19 +334,32 @@ function Dock:HideSet(S)
     boxHide(S.mRep)
 end
 
-function Dock:RepMode() return ns.db.panel.repPlace or "attach" end
+-- "attach", "below", "free" or "minimap" (the ring, XPRing.lua); a ring it cannot have means "attach"
+function Dock:RepMode()
+    local m = ns.db.panel.repPlace or "attach"
+    if m == "minimap" and not (ns.Ring and ns.Ring.RepWanted()) then return "attach" end
+    return m
+end
+
+-- where the XP bar is: "panel", "free" or "minimap" (the ring, XPRing.lua); a ring it cannot have (square minimap,
+-- highest level) means the panel
+function Dock:XPPlace()
+    if ns.Ring and ns.Ring.Wanted() then return "minimap" end
+    return ns.db.panel.xpPlace == "free" and "free" or "panel"
+end
 
 -- the reputation bar in the XP bar's place
 function Dock:RepInSlot()
     local p = ns.db.panel
-    if not ns.Rep:Active() or self:RepMode() == "free" then return false end
-    return not p.xpbar or ns.XP.AtMaxLevel() or false
+    if not ns.Rep:Active() or self:RepMode() == "free" or self:RepMode() == "minimap" then return false end
+    -- with the XP bar on the minimap the reputation bar takes its place on the panel
+    return not p.xpbar or ns.XP.AtMaxLevel() or self:XPPlace() == "minimap"
 end
 
 -- what heads the stack: "xp", "rep" (in the XP bar's place) or nil
 function Dock:StackMain()
     if self:RepInSlot() then return "rep" end
-    if ns.db.panel.xpbar then return "xp" end
+    if ns.db.panel.xpbar and self:XPPlace() ~= "minimap" then return "xp" end
     return nil
 end
 
@@ -374,7 +387,7 @@ function Dock:DrawStack(S, W, x0, top, open)
     local main = self:StackMain()
     local ctx = Dock.ctx
     local bw = W - 2 * x0
-    local withRep = main == "xp" and ns.Rep:Active() and self:RepMode() ~= "free"
+    local withRep = main == "xp" and ns.Rep:Active() and self:RepMode() ~= "free" and self:RepMode() ~= "minimap"
     local attach = self:RepMode() == "attach"
     local rw = math.floor(bw * (p.repWidth or 85) / 100 + 0.5)
     local rx0 = math.floor((W - rw) / 2 + 0.5)
@@ -431,7 +444,8 @@ local PAD = 10
 function Dock:LayoutHolders()
     local p = ns.db.panel
     local h = self.xpHolder
-    if p.xpPlace == "free" and self:StackMain() then
+    local place = self:XPPlace()
+    if place == "free" and self:StackMain() then
         local W = p.barWidth + 2 * PAD
         Dock.ctx = h
         local b = self:DrawStack(h.S, W, PAD, PAD, false)
@@ -442,7 +456,7 @@ function Dock:LayoutHolders()
     else
         self:HideSet(h.S)
         h:Hide()
-        if p.xpPlace == "free" then self.bar:Hide() end
+        if place ~= "panel" then self.bar:Hide() end
     end
     local r = self.repHolder
     if ns.Rep:Active() and self:RepMode() == "free" then

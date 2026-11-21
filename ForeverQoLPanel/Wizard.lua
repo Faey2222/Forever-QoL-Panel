@@ -97,8 +97,8 @@ local PAGES = {
     } },
     { id = "repbar", icon = "Interface\\Icons\\INV_Misc_Note_02", since = "1.2.0", title = "SEC_REP", text = "WZ_REP_TEXT", controls = {
         { "check", "OPT_REPBAR", panel, "repBar" },
-        { "choice", "OPT_REP_PLACE", panel, "repPlace", { { "attach", "REP_ATTACH" }, { "below", "REP_BELOW" }, { "free", "PLACE_FREE" } } },
-        { "choice", "OPT_XP_PLACE", panel, "xpPlace", { { "panel", "PLACE_PANEL" }, { "free", "PLACE_FREE" } } },
+        { "choice", "OPT_REP_PLACE", panel, "repPlace", { { "attach", "REP_ATTACH" }, { "below", "REP_BELOW" }, { "free", "PLACE_FREE" }, { "minimap", "PLACE_MINIMAP" } } },
+        { "choice", "OPT_XP_PLACE", panel, "xpPlace", { { "panel", "PLACE_PANEL" }, { "free", "PLACE_FREE" }, { "minimap", "PLACE_MINIMAP" } } },
         { "check", "OPT_GP_MAILALTS", gp, "mailAlts" },
     } },
     { id = "beasts", icon = "Interface\\Icons\\Ability_Hunter_BeastTaming", since = "1.3.0", title = "WZ_BEASTS", text = "WZ_BEASTS_TEXT", controls = {
@@ -132,6 +132,20 @@ local PAGES = {
         { "choice", "OPT_WARN_FOOD", wn, "soundFood", SOUNDS },
         { "choice", "OPT_WARN_FLASK", wn, "soundFlask", SOUNDS },
         { "choice", "OPT_WARN_AMMO", wn, "soundAmmo", SOUNDS, class = "HUNTER" },
+    } },
+    { id = "minimapring", icon = "Interface\\Icons\\Spell_Holy_SurgeOfLight", since = "1.7.0", title = "WZ_RING", text = "WZ_RING_TEXT", controls = {
+        { "choice", "OPT_XP_PLACE", panel, "xpPlace", { { "panel", "PLACE_PANEL" }, { "free", "PLACE_FREE" }, { "minimap", "PLACE_MINIMAP" } } },
+        { "choice", "OPT_REP_PLACE", panel, "repPlace", { { "attach", "REP_ATTACH" }, { "below", "REP_BELOW" }, { "free", "PLACE_FREE" }, { "minimap", "PLACE_MINIMAP" } } },
+    } },
+    { id = "minimapshape", icon = "Interface\\Icons\\INV_Misc_Map_01", since = "1.7.0", title = "WZ_MINIMAP", text = "WZ_MMSHAPE_TEXT", controls = {
+        { "choice", "OPT_MM_SHAPE", mm, "shape", { { "round", "MM_ROUND" }, { "square", "MM_SQUARE" } } },
+        { "choice", "OPT_MM_LOOK", mm, "look", { { "classic", "SKIN_CLASSIC" }, { "modern", "SKIN_MODERN" } } },
+        { "check", "OPT_MM_CALENDAR", mm, "calendar" },
+        { "check", "OPT_MM_COORDS", mm, "coords" },
+    } },
+    { id = "newelements", icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", since = "1.7.0", title = "WZ_NEWEL", text = "WZ_NEWEL_TEXT", controls = {
+        { "check", "ITEM_tracking", items, "tracking" },
+        { "check", "ITEM_wim", items, "wim" },
     } },
     { id = "beastpet", icon = "Interface\\Icons\\Ability_Hunter_BeastTraining", since = "1.4.0", title = "WZ_BEASTPET", text = "WZ_BEASTPET_TEXT", controls = {
         { "check", "OPT_TT_BEASTS", tt, "beasts", class = "HUNTER" },

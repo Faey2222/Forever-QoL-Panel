@@ -42,6 +42,10 @@ UI.NEED = {
     repbar = { function() return ns.db.panel.enabled and ns.db.panel.repBar end, "OPT_REPBAR" },
     repfree = { function() return ns.db.panel.repPlace == "free" end, "PLACE_FREE" },
     xpfree = { function() return ns.db.panel.xpPlace == "free" end, "PLACE_FREE" },
+    xpring = { function() return ns.db.panel.xpPlace == "minimap" end, "PLACE_MINIMAP" },
+    mmsquare = { function() return ns.db.minimap.shape == "square" end, "NEED_MM_SQUARE" },
+    repring = { function() return ns.db.panel.repPlace == "minimap" end, "PLACE_MINIMAP" },
+    xpnotring = { function() return ns.db.panel.xpPlace ~= "minimap" end, "NEED_XP_NOT_RING" },
     reptext = { function() return ns.db.panel.repText end, "OPT_XPTEXT" },
     hunter = { function() return select(2, UnitClass("player")) == "HUNTER" end, "NEED_HUNTER" },
     warlock = { function() return select(2, UnitClass("player")) == "WARLOCK" end, "NEED_WARLOCK" },
@@ -366,12 +370,14 @@ function Window:SetNav(items, active, onClick)
 end
 
 -- toggle: nil, or { get, set, label, tip } = the page's master switch, top right in the header
-function Window:SetHead(icon, title, sub, badge, toggle)
+-- tabs: nil, or { items = { { title, off } }, active, onClick(n) }: tabs below the title in place of the subtitle
+function Window:SetHead(icon, title, sub, badge, toggle, tabs)
     local b = self.body
     b.icon.icon:SetTexture(icon)
     b.title:SetText(title)
     b.sub:SetText(sub or "")
     b.badge:SetText(badge or "")
+    self:SetTabs(tabs)
     if not b.master then
         local m = CreateFrame("CheckButton", nil, b, "UICheckButtonTemplate")
         m:SetSize(30, 30)
@@ -406,6 +412,65 @@ function Window:SetHead(icon, title, sub, badge, toggle)
     else
         m:Hide(); m.label:Hide()
     end
+end
+
+-- Tabs: tab-shaped boxes standing on the header's divider, below the title. The chosen one is lit (gold glow, gold
+-- text, open towards the page), the others dark with grey text; a switched-off part greyer still.
+local TAB_H = 30
+function Window:SetTabs(tabs)
+    local b = self.body
+    b.tabs = b.tabs or {}
+    local items = tabs and tabs.items or {}
+    b.sub:SetShown(#items == 0)
+    local x = 96
+    for n, item in ipairs(items) do
+        local t = b.tabs[n]
+        if not t then
+            t = CreateFrame("Button", nil, b)
+            t:SetHeight(TAB_H)
+            t.bg = t:CreateTexture(nil, "BACKGROUND")
+            t.bg:SetAllPoints()
+            t.glow = t:CreateTexture(nil, "BACKGROUND", nil, 1)
+            t.glow:SetAllPoints()
+            t.glow:SetColorTexture(1, 1, 1, 1)
+            if t.glow.SetGradient and CreateColor then
+                t.glow:SetGradient("VERTICAL", CreateColor(0.55, 0.42, 0.18, 0.05), CreateColor(0.85, 0.65, 0.25, 0.45))
+            else
+                t.glow:SetColorTexture(0.85, 0.65, 0.25, 0.25)
+            end
+            -- border: top, left, right (open at the bottom, towards the page)
+            t.edges = {}
+            for i = 1, 3 do t.edges[i] = t:CreateTexture(nil, "BORDER") end
+            t.edges[1]:SetPoint("TOPLEFT"); t.edges[1]:SetPoint("TOPRIGHT"); t.edges[1]:SetHeight(1)
+            t.edges[2]:SetPoint("TOPLEFT"); t.edges[2]:SetPoint("BOTTOMLEFT"); t.edges[2]:SetWidth(1)
+            t.edges[3]:SetPoint("TOPRIGHT"); t.edges[3]:SetPoint("BOTTOMRIGHT"); t.edges[3]:SetWidth(1)
+            t.label = t:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            t.label:SetPoint("CENTER", 0, 0)
+            t.hl = t:CreateTexture(nil, "HIGHLIGHT")
+            t.hl:SetAllPoints()
+            t.hl:SetColorTexture(1, 0.82, 0, 0.12)
+            b.tabs[n] = t
+        end
+        local active = n == tabs.active
+        t.label:SetText(item.title)
+        t.label:SetFontObject(active and GameFontNormalLarge or (item.off and GameFontDisable or GameFontHighlight))
+        t.bg:SetColorTexture(active and 0.1 or 0.03, active and 0.08 or 0.03, active and 0.05 or 0.03, active and 0.95 or 0.85)
+        t.glow:SetShown(active)
+        for _, e in ipairs(t.edges) do
+            if active then e:SetColorTexture(1, 0.82, 0.3, 0.9) else e:SetColorTexture(0.45, 0.4, 0.32, 0.8) end
+        end
+        t:SetWidth(math.max(110, (t.label:GetStringWidth() or 60) + 36))
+        t:ClearAllPoints()
+        -- standing on the divider (at 96 from the top)
+        t:SetPoint("BOTTOMLEFT", b, "TOPLEFT", x, -96)
+        x = x + t:GetWidth() + 6
+        t:SetScript("OnClick", function() if not active then click(); tabs.onClick(n) end end)
+        t:Show()
+    end
+    for n = #items + 1, #b.tabs do b.tabs[n]:Hide() end
+    -- with tabs the title moves up a little to make room
+    b.title:ClearAllPoints()
+    b.title:SetPoint("TOPLEFT", 96, #items > 0 and -18 or -26)
 end
 
 -- Controls ---------------------------------------------------------------------------
@@ -580,13 +645,14 @@ end
 
 local function hideAll(list) for _, t in pairs(list) do if type(t) == "table" and t.Hide then t:Hide() elseif type(t) == "table" then hideAll(t) end end end
 
--- lays the look out for the frame's current size; call again after resizing
-function UI.Skin(f)
+-- lays the look out for the frame's current size; call again after resizing. skin: "classic" / "modern" in place of
+-- the panel's own (the square minimap's border has its own choice)
+function UI.Skin(f, skin)
     if f.SetBackdrop then f:SetBackdrop(nil) end
     local s = skinParts(f)
     local p = ns.db.panel
     local W, H = f:GetWidth() or 0, f:GetHeight() or 0
-    if p.skin == "modern" then
+    if (skin or p.skin) == "modern" then
         hideAll(s.c)
         local th = p.border or 2
         local r = p.corners == "round" and 6 or 0

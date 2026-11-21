@@ -22,7 +22,7 @@ Every feature can be switched on or off on its own. A short setup wizard walks y
 - XP bar with rested XP, tick marks and a preview of the XP your finished quests will give
 - Optional status text: XP, percent, rested XP and time to level, on or below the bar
 - Reputation bar for the faction you watch: attached to the XP bar, as its own bar below it or placed freely; at the highest level it takes the XP bar's place
-- Both bars can stay on the panel or be placed anywhere on the screen
+- Both bars can stay on the panel, be placed anywhere on the screen, or run as rings around the minimap
 
 **Move mode with grid**
 - One mode to place everything that can be moved: free bars, cast bars, warning groups and loot text
@@ -42,6 +42,10 @@ Every feature can be switched on or off on its own. A short setup wizard walks y
 - Sells grey items and repairs at merchants, guild funds first
 - Faster auto loot and loot shown as floating text with icons
 - Keeps the game's own sparkle on quest items in the world switched on, also after graphics presets
+
+**Minimap**
+- Round as in the game or square with a border in the panel's look
+- Hide the game's zone name, clock, time of day, tracking, Addons button and coordinates
 
 **Mail and characters**
 - Pick your other characters on the realm as mail recipients with one click

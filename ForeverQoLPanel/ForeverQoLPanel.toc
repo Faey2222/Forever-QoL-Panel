@@ -12,6 +12,8 @@ Core.lua
 Locale.lua
 Debug.lua
 XPBar.lua
+MinimapShape.lua
+XPRing.lua
 Reputation.lua
 Elements.lua
 Minimap.lua

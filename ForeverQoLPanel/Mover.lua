@@ -221,8 +221,8 @@ local function toolbar()
         end)
         return b
     end
-    bar.xp = cycle("xpPlace", { "panel", "free" }, 14)
-    bar.rep = cycle("repPlace", { "attach", "below", "free" }, 236)
+    bar.xp = cycle("xpPlace", { "panel", "free", "minimap" }, 14)
+    bar.rep = cycle("repPlace", { "attach", "below", "free", "minimap" }, 236)
     bar.done = CreateFrame("Button", nil, bar, "UIPanelButtonTemplate")
     bar.done:SetSize(90, 22)
     bar.done:SetPoint("BOTTOMRIGHT", -14, 9)
@@ -251,8 +251,8 @@ function M:UpdateBar()
     b.size:SetText(L().MOVE_SIZE:format(db().gridSize or 32))
     b.done:SetText(L().MOVE_DONE)
     local p = ns.db.panel
-    local XP = { panel = L().PLACE_PANEL, free = L().PLACE_FREE_SHORT }
-    local REP = { attach = L().REP_ATTACH, below = L().REP_BELOW, free = L().PLACE_FREE_SHORT }
+    local XP = { panel = L().PLACE_PANEL, free = L().PLACE_FREE_SHORT, minimap = L().PLACE_MINIMAP }
+    local REP = { attach = L().REP_ATTACH, below = L().REP_BELOW, free = L().PLACE_FREE_SHORT, minimap = L().PLACE_MINIMAP }
     b.xp:SetText(L().MOVE_XPBAR .. ": " .. (XP[p.xpPlace or "panel"] or "?"))
     b.rep:SetText(L().MOVE_REPBAR .. ": " .. (REP[p.repPlace or "attach"] or "?"))
     b.xp:SetEnabled(p.enabled and p.xpbar and true or false)

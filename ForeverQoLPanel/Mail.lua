@@ -9,7 +9,7 @@ ns.Mail = Mail
 local function on() local g = ns.db.gameplay; return g.enabled and g.mailAlts end
 
 function Mail:Alts()
-    local realm, faction, me = GetRealmName(), UnitFactionGroup("player") or "Neutral", UnitName("player")
+    local realm, faction, me = ns.Realm() or "", UnitFactionGroup("player") or "Neutral", UnitName("player")
     local list = {}
     for name, e in pairs(ns.db.gold[realm] and ns.db.gold[realm][faction] or {}) do
         -- full: first and last name, which mail needs (stored at each login since 1.2.0)

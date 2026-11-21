@@ -2,7 +2,7 @@ local ADDON, ns = ...
 
 ns.name = ADDON
 ns.title = "Forever QoL Panel"
-ns.VERSION = "1.6.0"   -- the setup wizard shows the pages of features newer than the last version seen
+ns.VERSION = "1.7.0"   -- the setup wizard shows the pages of features newer than the last version seen
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\media\\"
 
 function ns.Tex(name)
@@ -44,6 +44,85 @@ function ns.FullName()
     -- mail takes "First Last" with a space (the hyphen is only the client's internal spelling)
     if last and name then return name .. " " .. last end
     return name
+end
+
+-- The realm's name. Forever's client may answer "" (right after loading, and lately at all times; up to 1.6.0 the gold
+-- overview then filed the character under an empty realm). Then: the other realm functions, else the realm where
+-- this character is known already (from earlier logins), else the last known name. nil when nothing is known.
+local function plainName(v) return type(v) == "string" and not ns.Secret(v) and v ~= "" and v or nil end
+function ns.Realm()
+    local r = plainName(GetRealmName and GetRealmName()) or plainName(GetNormalizedRealmName and GetNormalizedRealmName())
+    if not r and ns.db and ns.db.gold then
+        local me, faction = UnitName("player"), UnitFactionGroup("player")
+        local found
+        for realm, factions in pairs(ns.db.gold) do
+            if realm ~= "" and realm ~= "?" and faction and factions[faction] and factions[faction][me] then
+                if found and found ~= realm then found = nil; break end
+                found = realm
+            end
+        end
+        r = found
+    end
+    if r then ns.lastRealm = r end
+    if ns.Debug and ns.db and ns.db.debug and not ns.realmNoted then
+        ns.realmNoted = true
+        local fn, fr = nil, nil
+        if UnitFullName then fn, fr = UnitFullName("player") end
+        ns.Debug.Set("realmApis", { realm = tostring(GetRealmName and GetRealmName()),
+            normalized = tostring(GetNormalizedRealmName and GetNormalizedRealmName()), fullRealm = tostring(fr),
+            id = tostring(GetRealmID and GetRealmID()), used = tostring(r or ns.lastRealm) })
+    end
+    return r or ns.lastRealm
+end
+
+-- Characters filed under an empty realm (see above) go to their real one: the realm where that character is known
+-- already (the character playing now: the current realm); the newer entry (higher level, else the empty realm's)
+-- wins. Characters known nowhere else stay where they are until their realm can be told. Same for item counts.
+function ns.FixEmptyRealm()
+    local here = ns.Realm()
+    if not here or here == "" then return end
+    local gold, items = ns.db.gold or {}, ns.db.items or {}
+    local me, myFaction = UnitName("player"), UnitFactionGroup("player")
+    local function home(faction, name)
+        if name == me and faction == myFaction then return here end
+        local found
+        for realm, factions in pairs(gold) do
+            if realm ~= "" and realm ~= "?" and factions[faction] and factions[faction][name] then
+                if found then return nil end       -- known on two realms: no telling
+                found = realm
+            end
+        end
+        return found
+    end
+    local moved = 0
+    for faction, chars in pairs(gold[""] or {}) do
+        for name, e in pairs(chars) do
+            local realm = home(faction, name)
+            if realm then
+                gold[realm] = gold[realm] or {}
+                gold[realm][faction] = gold[realm][faction] or {}
+                local old = gold[realm][faction][name]
+                if not old or (e.level or 0) >= (old.level or 0) then gold[realm][faction][name] = e end
+                chars[name] = nil
+                moved = moved + 1
+            end
+        end
+        if next(chars) == nil then gold[""][faction] = nil end
+    end
+    if gold[""] and next(gold[""]) == nil then gold[""] = nil end
+    for _, bad in ipairs({ "", "?" }) do
+        for key, c in pairs(items[bad] or {}) do
+            local faction, name = key:match("^(.-):(.+)$")
+            local realm = faction and home(faction, name)
+            if realm then
+                items[realm] = items[realm] or {}
+                items[realm][key] = c
+                items[bad][key] = nil
+            end
+        end
+        if items[bad] and next(items[bad]) == nil then items[bad] = nil end
+    end
+    if moved > 0 and ns.Debug then ns.Debug.Set("emptyRealmFixed", moved) end
 end
 
 -- A realm name as its type only: "CAMWOW EU4 Realm 6 PvP" -> "PvP", "CAMWOW EU5 Realm 9 RP PvP" -> "RP-PvP"
@@ -148,16 +227,18 @@ ns.defaults = {
         noticeEffect = "pulse",  -- how an element asks for attention (new mail): pulse, glow, blink, icon, none
         repWidth = 85, repTicks = 10,
         repPlace = "attach",     -- attach (hangs from the XP bar), below (own bar), free (move mode places it)
+        ringGap = 2, ringWidth = "medium",   -- the XP ring around the minimap (xpPlace "minimap")
+        repRingGap = 2, repRingWidth = "thin",   -- the reputation ring (repPlace "minimap"): to the XP ring or the map
         xpPlace = "panel",       -- panel or free; xpPos / repPos: centre offsets of bars set free        -- its width in % of the XP bar, tick marks
         repText = true, repTextName = true, repTextStanding = true, repTextValues = false, repTextPercent = false,
         repTextPos = "on", repTextSize = 8,
         collectButtons = true,   -- minimap buttons of other addons go into the panel's addon menu
-        order = { "hearth", "gold", "session", "bags", "mail", "materials", "ammo", "shards", "durability", "honor", "pvp", "favor", "zone",
-            "coords", "xph", "clock", "stopwatch", "latency", "fps", "addons" },
+        order = { "hearth", "gold", "session", "bags", "mail", "wim", "materials", "ammo", "shards", "durability", "honor", "pvp", "favor", "zone",
+            "coords", "tracking", "xph", "clock", "stopwatch", "latency", "fps", "addons" },
         items = {
             hearth = true, gold = true, session = true, bags = true, mail = true, materials = false, ammo = true, shards = true, durability = true,
             honor = false, pvp = false, favor = false, zone = true, coords = false, xph = true, clock = true, stopwatch = false,
-            latency = true, fps = false, addons = true,
+            latency = true, fps = false, addons = true, tracking = false, wim = false,
         },
         opt = {
             xphTime = false,     -- XP/h also shows the time to the next level
@@ -165,9 +246,15 @@ ns.defaults = {
             addonsIconOnly = false,   -- the addon menu shows only its icon and the arrow
             minimapClock = true, -- Blizzard's clock at the minimap stays
             serverTime = false,  -- the clock shows the realm time
+            trackingIconOnly = false,   -- tracking: just the icon
+            wimHideButton = true,       -- WIM element shown: WIM's own minimap button hidden
+            wimHideEmpty = false,       -- WIM: no text while there is nothing new
+            mailHideEmpty = false,      -- mail: no text while there is no mail
         },
     },
-    minimap = { show = true, angle = 205, keep = {}, floating = true },   -- floating: collector button without panel
+    -- shape round / square, look classic / modern (the square's border); zone, calendar, tracking: the game's elements
+    minimap = { show = true, angle = 205, keep = {}, floating = true, shape = "round", look = "classic",
+        zone = true, calendar = true, tracking = true, addons = true, coords = true },   -- floating: collector button without panel
     actionbar = { enabled = true, placeNew = true, replaceRanks = true, general = false, messages = true, seen = {} },
     layout = { grid = true, snap = true, gridSize = 32 },   -- move mode (Mover.lua)
     -- cast bars of target and focus (CastBar.lua): default, hide or free; targetPos / focusPos when free
@@ -322,10 +409,13 @@ function ns.Refresh()
     if ns.Elements and ns.Elements.pin then ns.Elements:UpdatePin() end
     if ns.Minimap then ns.Minimap:Update() end
     if ns.Elements and ns.Elements.ApplyMinimapClock then ns.Elements:ApplyMinimapClock() end
+    if ns.Elements and ns.Elements.ApplyWimButton then ns.Debug.Call("WimButton", ns.Elements.ApplyWimButton, ns.Elements) end
     if ns.Warnings and ns.Warnings.ApplyLook then ns.Warnings:ApplyLook() end
     if ns.Gameplay and ns.Gameplay.ApplyLootLook then ns.Gameplay:ApplyLootLook() end
     if ns.ButtonState then ns.ButtonState:Refresh() end
     if ns.CastBar then ns.CastBar:Refresh() end
+    if ns.MinimapShape then ns.MinimapShape:Apply() end
+    if ns.Ring then ns.Ring.RefreshAll() end
 end
 
 ns.On("ADDON_LOADED", function(_, name)
@@ -441,3 +531,6 @@ SlashCmdList.FOREVERQOLPANEL = function(msg)
             .. " border round|square|none | ticks 0|5|10|20|25 | pad <px> | width <px> | delay <s> | toggle <element> | reset")
     end
 end
+
+-- characters filed under an empty realm by older versions go to their real realm
+ns.OnLogin(function() ns.FixEmptyRealm() end)

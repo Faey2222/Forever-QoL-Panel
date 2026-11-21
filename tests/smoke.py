@@ -67,7 +67,92 @@ def main() -> int:
         ns.Elements:ShowMenu(UIParent)
         ns.Minimap:ShowMenu(UIParent)
         ns.Options:Open()
-        for i = 1, #ns.Options.PAGES do
+        -- characters filed under an empty realm (realm not known yet right after loading) go to their real realm
+do
+    local real = GetRealmName()
+    local g = ForeverQoLPanelDB.gold
+    g[real] = g[real] or {}; g[real].Alliance = g[real].Alliance or {}
+    g[real].Alliance.Alt = { money = 5, level = 11 }
+    g[""] = { Alliance = { Alt = { money = 9, level = 12 }, NewOne = { money = 1, level = 3 } } }
+    ForeverQoLPanelDB.items[""] = { ["Alliance:Alt"] = { bags = { [1] = 2 }, bank = {} } }
+    ns.FixEmptyRealm()
+    -- the known one goes to its realm, the one known nowhere else waits under the empty realm
+    assert(g[real].Alliance.Alt.money == 9 and g[""].Alliance.NewOne and not g[""].Alliance.Alt, "empty realm not merged")
+    assert(ForeverQoLPanelDB.items[""] == nil and ForeverQoLPanelDB.items[real]["Alliance:Alt"], "empty realm items not merged")
+    g[real].Alliance.Alt, g[""] = nil, nil
+    ForeverQoLPanelDB.items[real]["Alliance:Alt"] = nil
+    -- Forever answering "" all the time: the realm where this character is known
+    local realGRN, realNorm = GetRealmName, GetNormalizedRealmName
+    GetRealmName = function() return "" end
+    GetNormalizedRealmName = nil
+    ns.lastRealm = nil
+    local me = UnitName("player")
+    g["Some Realm 6 PvP"] = { [UnitFactionGroup("player")] = { [me] = { money = 1 } } }
+    local saved = g[real]; g[real] = nil
+    assert(ns.Realm() == "Some Realm 6 PvP", "realm from the known character: " .. tostring(ns.Realm()))
+    g[real] = saved; g["Some Realm 6 PvP"] = nil
+    GetRealmName, GetNormalizedRealmName = realGRN, realNorm
+    ns.lastRealm = nil
+end
+-- panel elements: tracking (the client's tracking list) and WIM (only with WIM 3, through its data broker object)
+do
+    local E = ns.Elements
+    local tracked = { false, true }
+    C_Minimap = C_Minimap or {}
+    local realCM = { C_Minimap.GetNumTrackingTypes, C_Minimap.GetTrackingInfo, C_Minimap.SetTracking }
+    C_Minimap.GetNumTrackingTypes = function() return 2 end
+    C_Minimap.GetTrackingInfo = function(i) return ({ "Kräutersuche", "Mineraliensuche" })[i], 136025, tracked[i] end
+    C_Minimap.SetTracking = function(i, on) tracked[i] = on end
+    assert(E:Available("tracking"), "tracking element not available")
+    assert(E.defs.tracking.text() == "Mineralien", "tracking text: " .. E.defs.tracking.text())
+    ForeverQoLPanelDB.panel.opt.trackingIconOnly = true
+    assert(E.defs.tracking.text() == "" and E.defs.tracking.minWidth() == 0, "tracking icon only")
+    ForeverQoLPanelDB.panel.opt.trackingIconOnly = false
+    C_Minimap.GetNumTrackingTypes, C_Minimap.GetTrackingInfo, C_Minimap.SetTracking = realCM[1], realCM[2], realCM[3]
+    assert(not E:Available("wim"), "WIM element without WIM")
+    local clicked
+    local obj = { OnClick = function(_, button) clicked = button end, OnTooltipShow = function(tt) tt:AddLine("WIM") end }
+    local realLS = LibStub
+    LibStub = function() return { GetDataObjectByName = function(_, name) return name == "WIM" and obj or nil end } end
+    WIM = { Notifications = { { tag = "Mario", text = "2", color = "ffffff" } } }
+    assert(E:Available("wim") and E.defs.wim.text():find("1"), "WIM element: " .. tostring(E.defs.wim.text()))
+    assert(E.defs.wim.pulse(), "WIM element does not ask for attention")
+    WIM.Notifications = {}
+    ForeverQoLPanelDB.panel.opt.wimHideEmpty = true
+    assert(E.defs.wim.text() == "" and E.defs.wim.minWidth() == 0, "WIM text without news")
+    ForeverQoLPanelDB.panel.opt.wimHideEmpty = false
+    WIM.Notifications = { { tag = "Mario", text = "2", color = "ffffff" } }
+    E.defs.wim.click(UIParent, "LeftButton")
+    assert(clicked == "LeftButton", "WIM menu not opened")
+    -- WIM's own minimap button goes while the element is shown
+    WIM3MinimapButton = CreateFrame("Button", "WIM3MinimapButton", Minimap)
+    ForeverQoLPanelDB.panel.items.wim = true; ns.Refresh()
+    assert(not WIM3MinimapButton:IsShown(), "WIM minimap button still shown")
+    WIM3MinimapButton:Show(); assert(not WIM3MinimapButton:IsShown(), "WIM shows its button again")
+    ForeverQoLPanelDB.panel.items.wim = false; ns.Refresh()
+    assert(WIM3MinimapButton:IsShown(), "WIM minimap button not back")
+    WIM, LibStub = nil, realLS
+end
+-- XP and reputation bar share a page with a tab each; the second tab shows the reputation settings
+do
+    local idx
+    for i, p in ipairs(ns.Options.PAGES) do if p.title == "SEC_BARS" then idx = i end end
+    assert(idx and #ns.Options.PAGES[idx].tabs == 2, "bars page with tabs")
+    ns.Options.tabOf = { [idx] = 2 }
+    ns.Options:Show(idx)
+    local tabs = ns.Options.frame.body.tabs
+    assert(tabs[2]:IsShown() and tabs[2].glow:IsShown() and not tabs[1].glow:IsShown(), "reputation tab not chosen")
+    -- long pages are split into tabs at their section headers
+    for _, title in ipairs({ "SEC_ELEMENTS", "SEC_WARNINGS", "SEC_LOOTOPT" }) do
+        local i2
+        for i, p in ipairs(ns.Options.PAGES) do if p.title == title then i2 = i end end
+        ns.Options.tabOf = { [i2] = 2 }
+        ns.Options:Show(i2)
+        assert(tabs[2]:IsShown() and tabs[2].glow:IsShown(), "header tabs on " .. title)
+    end
+    ns.Options.tabOf = nil
+end
+for i = 1, #ns.Options.PAGES do
             ns.Options:Show(i)
             local pool = ns.Options.frame.pool.check
             if pool and pool[1] then pool[1].box.scripts.OnClick(pool[1].box); pool[1].box.scripts.OnClick(pool[1].box) end
@@ -446,6 +531,132 @@ def main() -> int:
             assert(not ForeverQoLPanelCastBar_target:IsShown(), "holder left after default")
             MOCK_secret[S] = nil
         end
+        -- XP ring around the minimap: shown with its fills, the panel gives the bar up, a square minimap brings it back
+        do
+            local P = ForeverQoLPanelDB.panel
+            local cds = {}
+            local realCF = CreateFrame
+            CreateFrame = function(kind, ...)
+                local f = realCF(kind, ...)
+                if kind == "Cooldown" then
+                    cds[#cds + 1] = f
+                    f.SetCooldown = function(self, start, dur) self.share = (GetTime() - start) / dur end
+                end
+                return f
+            end
+            Minimap.GetWidth = function() return 140 end
+            P.xpPlace = "minimap"; ns.Refresh()
+            CreateFrame = realCF
+            local ring = ForeverQoLPanelXPRing
+            assert(ring and ring:IsShown() and ns.Dock:XPPlace() == "minimap", "XP ring not shown")
+            assert(#cds == 4 and cds[4].share and cds[4].share > 0, "XP ring fill: " .. tostring(cds[4] and cds[4].share))
+            assert(ns.Dock:StackMain() ~= "xp", "XP bar still on the panel with the ring")
+            -- folded without a bar in the panel, part of it stays at the screen edge for the mouse
+            assert(ns.Dock.folded < ns.Dock:GetHeight(), "panel leaves the screen completely when folded")
+            -- the reputation ring outside the XP ring, the reputation bar off the panel
+            local realData = ns.Rep.Data
+            ns.Rep.Data = function() return "Sturmwind", 5, 300, 1000 end
+            P.repBar, P.repPlace = true, "minimap"; ns.Refresh()
+            local rr = ForeverQoLPanelRepRing
+            assert(rr and rr:IsShown() and ns.Dock:RepMode() == "minimap", "reputation ring not shown")
+            assert(ns.RepRing.outer > ns.Ring.outer, "reputation ring not outside the XP ring")
+            assert(rr.arcs.fill.share and math.abs(rr.arcs.fill.share - 0.3) < 0.01, "reputation ring fill")
+            -- without the XP ring: right at the map
+            P.xpPlace = "panel"; ns.Refresh()
+            assert(rr:IsShown() and ns.RepRing.base == nil, "reputation ring alone")
+            P.xpPlace = "minimap"; P.repPlace = "attach"; ns.Refresh()
+            assert(not rr:IsShown(), "reputation ring left")
+            ns.Rep.Data = realData
+            -- the bar's look of finished quests applies to the ring too
+            XP_CACHE_Q = ns.XP.cachedQuestXP
+            ns.XP.cachedQuestXP = 500
+            P.questStyle = "stripes"; ns.Refresh()
+            assert(cds[3].tex and cds[3].tex:find("q%-stripes"), "ring ignores the quest style: " .. tostring(cds[3].tex))
+            P.questStyle = "veil"; ns.Refresh()
+            assert(cds[3].tex:find("%-gold"), "ring veil style: " .. tostring(cds[3].tex))
+            ns.XP.cachedQuestXP = XP_CACHE_Q
+            -- the tooltip when the mouse is on the band (centre 500/400 in the mock, outer radius about 80)
+            ring.IsVisible = function(self) return self:IsShown() end
+            local realCursor = GetCursorPosition
+            GetCursorPosition = function() return 500 + 76, 400 end
+            ns.Ring:CheckHover(); assert(ns.Ring.hover, "XP ring tooltip")
+            -- the minimap cluster under the mouse (it takes the mouse on Forever): still the tooltip; a button: its own
+            local cluster = CreateFrame("Frame", "FakeCluster", UIParent)
+            cluster.IsObjectType = function(_, t) return t == "Frame" end
+            GetMouseFoci = function() return { cluster } end
+            ns.Ring.hover = false; ns.Ring:CheckHover(); assert(ns.Ring.hover, "XP ring tooltip over the minimap cluster")
+            local btn = CreateFrame("Button", "FakeMMButton", Minimap)
+            btn.IsObjectType = function(_, t) return t == "Button" end
+            GetMouseFoci = function() return { btn } end
+            ns.Ring:CheckHover(); assert(not ns.Ring.hover, "XP ring tooltip over a minimap button")
+            GetMouseFoci = nil
+            GetCursorPosition = function() return 500 + 76, 400 end
+            ns.Ring:CheckHover()
+            GetCursorPosition = function() return 500 + 20, 400 end
+            ns.Ring:CheckHover(); assert(not ns.Ring.hover, "XP ring tooltip over the map")
+            GetCursorPosition = realCursor
+            -- our square minimap: a square frame of straight pieces, the minimap answers SQUARE, the border shows
+            ForeverQoLPanelDB.minimap.shape, ForeverQoLPanelDB.minimap.look = "square", "modern"; ns.Refresh()
+            assert(GetMinimapShape and GetMinimapShape() == "SQUARE", "square minimap shape")
+            assert(ForeverQoLPanelMinimapBorder:IsShown(), "square minimap border")
+            assert(ring:IsShown() and ns.Ring.shape == "square" and ring.sq.fill[1]:IsShown(), "XP frame around the square minimap")
+            GetCursorPosition = function() return 500 + ns.Ring.h, 400 end
+            ns.Ring:CheckHover(); assert(ns.Ring.hover, "square XP frame tooltip")
+            GetCursorPosition = realCursor
+            ForeverQoLPanelDB.minimap.shape = "round"; ns.Refresh()
+            assert(GetMinimapShape == nil and not ForeverQoLPanelMinimapBorder:IsShown() and ns.Ring.shape == "round", "back to round")
+            -- the classic border needs more room than the modern one
+            ForeverQoLPanelDB.minimap.shape, ForeverQoLPanelDB.minimap.look = "square", "classic"; ns.Refresh()
+            assert(ns.MinimapShape.BorderPad() == 9 and ns.MinimapShape.RingPad() == 5 and ForeverQoLPanelMinimapBorder:IsShown(), "classic square border")
+            ForeverQoLPanelDB.minimap.shape = "round"; ns.Refresh()
+            -- the game's elements at the minimap: hidden when unticked, back when ticked again
+            GameTimeFrame = CreateFrame("Button", "GameTimeFrame", Minimap)
+            local gtfAlpha = 1
+            GameTimeFrame.SetAlpha = function(_, a) gtfAlpha = a end
+            GameTimeFrame.GetAlpha = function() return gtfAlpha end
+            ForeverQoLPanelDB.minimap.calendar = false; ns.Refresh()
+            assert(GameTimeFrame:GetAlpha() == 0, "calendar still at the minimap")
+            GameTimeFrame:SetAlpha(1); assert(GameTimeFrame:GetAlpha() == 0, "calendar shown again by the game")
+            ForeverQoLPanelDB.minimap.calendar = true; ns.Refresh()
+            assert(GameTimeFrame:GetAlpha() == 1, "calendar not back")
+            -- Forever's day and night icon: an unnamed small frame in the minimap's container
+            local cont = CreateFrame("Frame", nil, UIParent)
+            MinimapCluster = MinimapCluster or CreateFrame("Frame", "MinimapCluster", UIParent)
+            rawset(MinimapCluster, "MinimapContainer", cont)
+            local diel = CreateFrame("Frame", nil, cont); diel:SetSize(40, 40)
+            local dielAlpha = 1
+            diel.SetAlpha = function(_, a) dielAlpha = a end
+            diel.GetAlpha = function() return dielAlpha end
+            cont.GetChildren = function() return diel end
+            ForeverQoLPanelDB.minimap.calendar = false; ns.Refresh()
+            assert(dielAlpha == 0, "day and night icon still shown")
+            ForeverQoLPanelDB.minimap.calendar = true; ns.Refresh()
+            assert(dielAlpha == 1, "day and night icon not back")
+            rawset(MinimapCluster, "MinimapContainer", nil)
+            -- coordinates under the map: found by their text, faded out and back
+            MinimapCluster = MinimapCluster or CreateFrame("Frame", "MinimapCluster", UIParent)
+            local coordFrame = CreateFrame("Frame", nil, MinimapCluster)
+            local fs = coordFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            fs:SetText("65.0, 50.3")
+            local alpha = 1
+            fs.SetAlpha = function(_, a) alpha = a end
+            fs.GetAlpha = function() return alpha end
+            local realKids, realRegs = MinimapCluster.GetChildren, MinimapCluster.GetRegions
+            MinimapCluster.GetChildren = function() return coordFrame end
+            coordFrame.GetRegions = function() return fs end
+            fs.GetObjectType = function() return "FontString" end
+            ForeverQoLPanelDB.minimap.coords = false; ns.Refresh()
+            assert(alpha == 0, "coordinates still shown")
+            ForeverQoLPanelDB.minimap.coords = true; ns.Refresh()
+            assert(alpha == 1, "coordinates not back")
+            MinimapCluster.GetChildren, MinimapCluster.GetRegions = realKids, realRegs
+            -- a shape the ring cannot follow: the XP bar goes back to the panel
+            GetMinimapShape = function() return "CORNER-TOPLEFT" end
+            ns.Refresh()
+            assert(not ring:IsShown() and ns.Dock:XPPlace() == "panel", "XP ring with an odd minimap shape")
+            GetMinimapShape = nil
+            P.xpPlace = "panel"; ns.Refresh()
+        end
         -- warning sounds: each category its own, only when its warning is new, the old switch migrated
         do
             local W, played = ns.Warnings, {}
@@ -574,9 +785,9 @@ def main() -> int:
         for _ = 1, 30 do ns.Wizard:Go(1) end
         assert(ForeverQoLPanelDB.wizard == ns.VERSION, "wizard not finished")
         ForeverQoLPanelDB.wizard = "0.1.0"; ns.Wizard:Open(false)
-        assert(#ns.Wizard.pages == 19, "update pages: " .. #ns.Wizard.pages)
+        assert(#ns.Wizard.pages == 22, "update pages: " .. #ns.Wizard.pages)
         for i = 1, 8 do ns.Wizard:Jump(i) end
-        ns.Wizard:OpenNews(); assert(#ns.Wizard.pages == 3 and ns.Wizard.pages[2].id == "castbar" and ns.Wizard.pages[3].id == "warnsounds", "news pages: " .. #ns.Wizard.pages)
+        ns.Wizard:OpenNews(); assert(#ns.Wizard.pages == 4 and ns.Wizard.pages[2].id == "minimapring" and ns.Wizard.pages[4].id == "newelements", "news pages: " .. #ns.Wizard.pages)
         ns.Wizard.frame.tiles[1]:GetScript("OnClick")(ns.Wizard.frame.tiles[1])
         ns.Wizard:Finish()
         SlashCmdList.FOREVERQOLPANEL("reset")

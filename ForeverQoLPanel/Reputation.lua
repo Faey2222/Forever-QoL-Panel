@@ -57,6 +57,8 @@ local function color(reaction)
     return 0.2, 0.6, 0.2
 end
 
+Rep.Color = color
+
 local function standing(reaction) return _G["FACTION_STANDING_LABEL" .. (reaction or 4)] or "?" end
 
 local function num(n) return BreakUpLargeNumbers and BreakUpLargeNumbers(floor(n + 0.5)) or tostring(floor(n + 0.5)) end

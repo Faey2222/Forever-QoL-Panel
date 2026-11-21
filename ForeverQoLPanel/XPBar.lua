@@ -690,9 +690,10 @@ function XP:Draw()
     end
 end
 
-function XP:ShowTooltip()
+-- owner: the frame the tooltip belongs to (the minimap ring), the bar itself by default
+function XP:ShowTooltip(owner)
     local L = ns.L
-    local f = self.frame
+    local f = owner or self.frame
     local tt = GameTooltip
     tt:SetOwner(f, ns.TipPoint())
     local level = UnitLevel("player") or 1
@@ -714,9 +715,11 @@ function XP:ShowTooltip()
     tt:AddLine(" ")
     local q, n, all, list = XP.cachedQuestXP or 0, XP.cachedQuestCount or 0, XP.cachedLogXP or 0, XP.cachedQuestList or {}
     if n > 0 then
-        tt:AddDoubleLine(fmt(L.QUESTS_DONE, n), "+" .. num(q), GOLD[1], GOLD[2], GOLD[3], GOLD[1], GOLD[2], GOLD[3])
+        -- the XP and its share of the level
+        local function pct(v) return "+" .. num(v) .. "  (" .. decimal(v / mx * 100) .. " %)" end
+        tt:AddDoubleLine(fmt(L.QUESTS_DONE, n), pct(q), GOLD[1], GOLD[2], GOLD[3], GOLD[1], GOLD[2], GOLD[3])
         for _, e in ipairs(list) do
-            if e[3] then tt:AddDoubleLine("   " .. e[1], "+" .. num(e[2]), 0.62, 0.62, 0.62, 0.62, 0.62, 0.62) end
+            if e[3] then tt:AddDoubleLine("   " .. e[1], pct(e[2]), 0.62, 0.62, 0.62, 0.62, 0.62, 0.62) end
         end
         if cur + q >= mx then
             tt:AddLine(fmt(L.QUESTS_ENOUGH, level + 1, num(cur + q - mx)), 0.12, 1, 0)

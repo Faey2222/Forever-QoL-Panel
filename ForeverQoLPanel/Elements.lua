@@ -93,6 +93,9 @@ local lastMoney
 local function S() return ns.Session() end
 
 local function store()
+    -- the realm and faction as they are now (right after loading the client may not know them yet: nothing stored)
+    realm, faction, me = ns.Realm() or "", UnitFactionGroup("player"), UnitName("player")
+    if not (realm and faction and me) then return end
     local m = GetMoney()
     ns.db.gold[realm] = ns.db.gold[realm] or {}
     ns.db.gold[realm][faction] = ns.db.gold[realm][faction] or {}
@@ -113,6 +116,7 @@ def("gold", {
     text = function() return money(GetMoney()) end,
     tip = function(tt)
         header(tt, L.GOLD_REALM)
+        realm, faction = ns.Realm(), UnitFactionGroup("player")
         tt:AddLine(fmt("%s, %s", ns.ShortRealm(realm) or "?", faction or "?"), 0.62, 0.62, 0.62)
         local chars, total = {}, 0
         for name, e in pairs(ns.db.gold[realm] and ns.db.gold[realm][faction] or {}) do
@@ -365,9 +369,10 @@ end
 
 def("mail", {
     icon = "Interface\\Icons\\INV_Letter_15",
-    minWidth = 40,
+    -- setting mailHideEmpty: just the icon while there is no mail
+    minWidth = function() return opt("mailHideEmpty") and 0 or 40 end,
     text = function()
-        if not (HasNewMail and HasNewMail()) then return "|cffa0a0a0" .. L.MAIL_NONE .. "|r" end
+        if not (HasNewMail and HasNewMail()) then return opt("mailHideEmpty") and "" or ("|cffa0a0a0" .. L.MAIL_NONE .. "|r") end
         local s = mailSenders()
         if #s == 1 then return "|cffffd100" .. s[1] .. "|r" end
         if #s > 1 then return "|cffffd100" .. L.MAIL_FROM_N:format(#s) .. "|r" end
@@ -572,6 +577,177 @@ def("coords", {
     click = openMap,
 })
 
+-- Tracking --------------------------------------------------------------------------
+-- What the minimap tracks (herbs, minerals ...): the active one's icon and name, a click lists every kind to switch.
+
+local function trackingList()
+    local out = {}
+    local CM = C_Minimap
+    local num = CM and CM.GetNumTrackingTypes or GetNumTrackingTypes
+    local get = CM and CM.GetTrackingInfo or GetTrackingInfo
+    if not (num and get) then return out end
+    local ok, n = pcall(num)
+    for i = 1, (ok and type(n) == "number" and n) or 0 do
+        local a, b, c = get(i)
+        local info = type(a) == "table" and a or { name = a, texture = b, active = c }
+        if type(info.name) == "string" then
+            out[#out + 1] = { index = i, name = info.name, texture = info.texture, active = info.active and true or false }
+        end
+    end
+    return out
+end
+
+-- the kind alone: "Mineraliensuche" -> "Mineralien", "Find Herbs" -> "Herbs"
+local SHORTEN = { "^Find%s+", "^Track%s+", "suche$", "%s+aufspüren$", "^Wildtiere%s+", "^Détection des?%s+", "^Pistage des?%s+",
+    "^Buscar%s+", "^Rastrear%s+", "^Поиск%s+", "^Выслеживание%s+", "^寻找", "^追踪" }
+local function shortName(name)
+    local s = name
+    for _, pat in ipairs(SHORTEN) do s = s:gsub(pat, "") end
+    s = s:gsub("^%s+", ""):gsub("%s+$", "")
+    return s ~= "" and s or name
+end
+
+local function activeTracking()
+    local on = {}
+    for _, t in ipairs(trackingList()) do if t.active then on[#on + 1] = t end end
+    return on
+end
+
+local function setTracking(i, on)
+    local set = C_Minimap and C_Minimap.SetTracking or SetTracking
+    if set then pcall(set, i, on) end
+end
+
+-- the game's own tracking button (when the client has no tracking list for addons)
+local function blizzardTracking()
+    local t = MinimapCluster and rawget(MinimapCluster, "Tracking")
+    return (t and rawget(t, "Button")) or t or _G.MiniMapTrackingButton or _G.MiniMapTracking
+end
+
+-- the panel follows when tracking changes elsewhere (the event is not there in every client)
+pcall(function() ns.On("MINIMAP_UPDATE_TRACKING", function() E:UpdateTexts(); E:ApplyIcons() end) end)
+
+def("tracking", {
+    icon = function()
+        local on = activeTracking()
+        if on[1] and on[1].texture then return on[1].texture end
+        return (GetTrackingTexture and GetTrackingTexture()) or "Interface\\Icons\\Ability_Tracking"
+    end,
+    available = function() return #trackingList() > 0 or blizzardTracking() ~= nil end,
+    -- setting trackingIconOnly: just the icon (a second active kind as "+1")
+    minWidth = function() return opt("trackingIconOnly") and 0 or 40 end,
+    text = function()
+        local on = activeTracking()
+        local more = #on > 1 and ("|cffa0a0a0+" .. (#on - 1) .. "|r") or ""
+        if opt("trackingIconOnly") then return more end
+        if #on == 0 then return "|cffa0a0a0" .. L.TRACK_NONE_SHORT .. "|r" end
+        return shortName(on[1].name) .. (more ~= "" and ("  " .. more) or "")
+    end,
+    tip = function(tt)
+        header(tt, L.ITEM_tracking)
+        local on = activeTracking()
+        if #on == 0 then tt:AddLine(L.TRACK_NONE, 0.62, 0.62, 0.62) end
+        for _, t in ipairs(on) do tt:AddLine(t.name, 1, 1, 1) end
+        hint(tt, L.CLICK_TRACKING)
+    end,
+    click = function(cell)
+        local list = trackingList()
+        if #list > 0 and MenuUtil and MenuUtil.CreateContextMenu then
+            MenuUtil.CreateContextMenu(cell, function(_, root)
+                root:CreateTitle(L.ITEM_tracking)
+                for _, t in ipairs(list) do
+                    root:CreateCheckbox(t.name, function()
+                        for _, x in ipairs(trackingList()) do if x.index == t.index then return x.active end end
+                        return false
+                    end, function()
+                        local now = false
+                        for _, x in ipairs(trackingList()) do if x.index == t.index then now = x.active end end
+                        setTracking(t.index, not now)
+                        C_Timer.After(0.1, function() E:UpdateTexts(); E:ApplyIcons() end)
+                    end)
+                end
+            end)
+            return
+        end
+        local b = blizzardTracking()
+        if b and b.Click then b:Click() end
+    end,
+})
+
+-- WIM ---------------------------------------------------------------------------------
+-- WIM 3 (whisper windows): unread conversations, WIM's own menu on a click (the one of its minimap button), its tools
+-- with Shift-right-click. Only there when WIM 3 is installed; it is reached through WIM's data broker object.
+
+local function wimButton() return rawget(_G, "WIM3MinimapButton") end
+
+-- while the element is shown (and the setting wimHideButton is on) WIM's own minimap button is hidden
+function E:ApplyWimButton()
+    local b = wimButton()
+    if not b then return end
+    local hide = E:Shown("wim") and opt("wimHideButton") and ns.db.panel.enabled
+    if not self.wimHooked then
+        self.wimHooked = true
+        hooksecurefunc(b, "Show", function(btn) if E.wimHidden then btn:Hide() end end)
+    end
+    if hide then
+        self.wimHidden = true
+        b:Hide()
+    elseif self.wimHidden then
+        self.wimHidden = false
+        b:Show()
+    end
+end
+
+local function wim()
+    local W = rawget(_G, "WIM")
+    if type(W) ~= "table" or type(W.Notifications) ~= "table" then return nil end
+    local LS = rawget(_G, "LibStub")
+    local ldb = LS and LS("LibDataBroker-1.1", true)
+    local obj = ldb and ldb.GetDataObjectByName and ldb:GetDataObjectByName("WIM")
+    return W, obj
+end
+
+def("wim", {
+    icon = "Interface\\AddOns\\WIM\\Skins\\Default\\minimap",
+    available = function() return wim() ~= nil end,
+    -- setting wimHideEmpty: just the icon while there is nothing new
+    minWidth = function() return opt("wimHideEmpty") and 0 or 40 end,
+    text = function()
+        local W = wim()
+        local n = W and #W.Notifications or 0
+        if n == 0 then return opt("wimHideEmpty") and "" or ("|cffa0a0a0" .. L.WIM_NONE .. "|r") end
+        return "|cffffd100" .. L.WIM_NEW:format(n) .. "|r"
+    end,
+    pulse = function()
+        local W = wim()
+        return W and #W.Notifications > 0 or false
+    end,
+    tip = function(tt)
+        local W, obj = wim()
+        if obj and obj.OnTooltipShow then
+            pcall(obj.OnTooltipShow, tt)
+        else
+            header(tt, "WIM")
+        end
+        if W and #W.Notifications == 0 then tt:AddLine(L.WIM_NONE, 0.62, 0.62, 0.62) end
+        hint(tt, L.CLICK_WIM)
+        hint(tt, L.CLICK_WIM_TOOLS)
+    end,
+    -- left: WIM's menu below the cell; middle and Shift-right: as on WIM's own button
+    click = function(cell, button)
+        local _, obj = wim()
+        if obj and obj.OnClick then pcall(obj.OnClick, cell, button or "LeftButton") end
+    end,
+    ownRightClick = true,   -- right-click as on WIM's own button (tools / unread windows), not the panel's menu
+})
+
+-- WIM makes its button some time after loading: hidden again once it is there
+ns.OnLogin(function()
+    for _, delay in ipairs({ 1, 4, 10 }) do
+        C_Timer.After(delay, function() ns.Debug.Call("WimButton", E.ApplyWimButton, E) end)
+    end
+end)
+
 -- XP per hour ---------------------------------------------------------------------
 
 def("xph", {
@@ -729,7 +905,7 @@ local function showTip(cell)
     GameTooltip:SetOwner(cell, ns.TipPoint())
     d.tip(GameTooltip)
     GameTooltip:AddLine(L.DRAG_HINT, 0.5, 0.5, 0.5)
-    GameTooltip:AddLine(L.RIGHT_CLICK_MENU, 0.5, 0.5, 0.5)
+    if not d.ownRightClick then GameTooltip:AddLine(L.RIGHT_CLICK_MENU, 0.5, 0.5, 0.5) end
     GameTooltip:Show()
 end
 
@@ -847,8 +1023,10 @@ end
 
 function E:Build(parent)
     self.band = parent
-    realm, faction, me = GetRealmName(), UnitFactionGroup("player") or "Neutral", UnitName("player")
     store()
+    -- stored again once the realm is surely known
+    ns.OnLogin(function() store() end)
+    ns.On("PLAYER_ENTERING_WORLD", function() store() end)
     E.ApplyFont()
     ns.On("PLAYER_MONEY", function() store(); E:UpdateTexts(); ns.Dock:Relayout() end)
 
@@ -860,7 +1038,7 @@ function E:Build(parent)
         local c = CreateFrame("Button", nil, parent)
         c.key = key
         c:SetHeight(BH)
-        c:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        c:RegisterForClicks("LeftButtonUp", "RightButtonUp", "MiddleButtonUp")
         c:RegisterForDrag("LeftButton")
         c.hl = c:CreateTexture(nil, "BACKGROUND")
         c.hl:SetAllPoints()
@@ -901,8 +1079,9 @@ function E:Build(parent)
         c:SetScript("OnLeave", function(self) GameTooltip:Hide(); hover(self, false) end)
         c:SetScript("OnClick", function(self, button)
             GameTooltip:Hide()
-            if button == "RightButton" then E:ShowMenu(self)
-            elseif d.click then d.click(self) end
+            -- right-click is the panel's menu, unless the element takes it for itself (WIM)
+            if button == "RightButton" and not d.ownRightClick then E:ShowMenu(self)
+            elseif d.click then d.click(self, button) end
         end)
         c:SetScript("OnDragStart", function() E:StartDrag(c) end)
         c:SetScript("OnDragStop", function() E:StopDrag() end)
@@ -1060,6 +1239,11 @@ function E:Available(key)
         local _, class = UnitClass("player")
         if class ~= d.class then return false end
     end
+    -- an element that needs something (another addon, a client feature)
+    if d.available then
+        local ok, yes = pcall(d.available)
+        if not ok or not yes then return false end
+    end
     return true
 end
 
@@ -1122,7 +1306,8 @@ function E:Layout()
     for _, key in ipairs(p.order) do
         local c, d = self.cells[key], self.defs[key]
         if c and self:Shown(key) then
-            local tw = ceil(math.max(c.steady or c.text:GetStringWidth(), d.minWidth or 0))
+            local mw = type(d.minWidth) == "function" and d.minWidth() or d.minWidth or 0
+        local tw = ceil(math.max(c.steady or c.text:GetStringWidth(), mw))
             local w = pad * 2 + ICON + GAP + tw
             c:ClearAllPoints()
             c:SetPoint("TOPLEFT", self.band, "TOPLEFT", x, 0)
@@ -1168,8 +1353,8 @@ end
 E.GROUPS = {
     { "EL_GROUP_MONEY", { "gold", "session", "bags", "materials", "ammo", "shards" } },
     { "EL_GROUP_PROGRESS", { "xph", "durability", "honor", "pvp", "favor" } },
-    { "EL_GROUP_WORLD", { "hearth", "zone", "coords", "clock", "stopwatch" } },
-    { "EL_GROUP_SYSTEM", { "mail", "latency", "fps", "addons" } },
+    { "EL_GROUP_WORLD", { "hearth", "zone", "coords", "tracking", "clock", "stopwatch" } },
+    { "EL_GROUP_SYSTEM", { "mail", "wim", "latency", "fps", "addons" } },
 }
 
 -- { { title, { keys available to this character } }, ... }
