@@ -2,7 +2,7 @@ local ADDON, ns = ...
 
 ns.name = ADDON
 ns.title = "Forever QoL Panel"
-ns.VERSION = "1.7.1"   -- the setup wizard shows the pages of features newer than the last version seen
+ns.VERSION = "1.8.0"   -- the setup wizard shows the pages of features newer than the last version seen
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\media\\"
 
 function ns.Tex(name)
@@ -228,17 +228,21 @@ ns.defaults = {
         repWidth = 85, repTicks = 10,
         repPlace = "attach",     -- attach (hangs from the XP bar), below (own bar), free (move mode places it)
         ringGap = 2, ringWidth = "medium",   -- the XP ring around the minimap (xpPlace "minimap")
-        repRingGap = 2, repRingWidth = "thin",   -- the reputation ring (repPlace "minimap"): to the XP ring or the map
+        repRingGap = 2, repRingWidth = "thin",
+        -- the hunter pet's XP bar (PetXP.lua): side / attach / minimap / free / portrait; petPos when free
+        petBar = false, petPlace = "attach", petSide = "right", petSideWidth = 25, petWidth = 85,
+        petFreeWidth = 160, petFreeHeight = 10, petColor = "orange", petTicks = 10,
+        petPortraitWidth = 0, petPortraitHeight = 10, petPortraitX = 0, petPortraitY = 0,   -- below the pet's portrait (width 0 = its frame's)   -- the reputation ring (repPlace "minimap"): to the XP ring or the map
         xpPlace = "panel",       -- panel or free; xpPos / repPos: centre offsets of bars set free        -- its width in % of the XP bar, tick marks
         repText = true, repTextName = true, repTextStanding = true, repTextValues = false, repTextPercent = false,
         repTextPos = "on", repTextSize = 8,
         collectButtons = true,   -- minimap buttons of other addons go into the panel's addon menu
-        order = { "hearth", "gold", "session", "bags", "mail", "wim", "materials", "ammo", "shards", "durability", "honor", "pvp", "favor", "zone",
-            "coords", "tracking", "xph", "clock", "stopwatch", "latency", "fps", "addons" },
+        order = { "hearth", "gold", "session", "bags", "mail", "wim", "together", "materials", "ammo", "shards", "durability", "honor", "pvp", "favor", "zone",
+            "coords", "tracking", "radar", "xph", "clock", "stopwatch", "latency", "fps", "addons" },
         items = {
             hearth = true, gold = true, session = true, bags = true, mail = true, materials = false, ammo = true, shards = true, durability = true,
             honor = false, pvp = false, favor = false, zone = true, coords = false, xph = true, clock = true, stopwatch = false,
-            latency = true, fps = false, addons = true, tracking = false, wim = false,
+            latency = true, fps = false, addons = true, tracking = false, wim = false, radar = false, together = false,
         },
         opt = {
             xphTime = false,     -- XP/h also shows the time to the next level
@@ -275,11 +279,23 @@ ns.defaults = {
         combat = false, scale = 1, foodWhere = "instance", flask = true, flaskWhere = "raid",
         iconShape = "panel", anim = "pulse", animRepeat = "once",
         hideWithWindows = true, ammo = true, ammoMin = 200, hideResting = false },   -- pos / link: placement of the two groups
-    tooltip = { enabled = true, sellValue = true, counts = true, gather = true, beasts = true },
+    -- questing together (Together.lua): window with the group's active quests (pos, locked); state: this group's
+    together = { enabled = true, window = true, locked = false, xpWindow = true, xpSeparate = false, xpLocked = false,
+        minimizeTracker = true, autoAccept = true, soundAllDone = true, turnInWatch = true, soundTurnIn = true },   -- autoAccept: quests shared through the addon are accepted   -- Blizzard's quest tracker folds up while most of the group uses the addon   -- xpPos when the XP window is moved
+    -- enemy radar (Radar.lua): sounds, the stealth warning, the list below the element; stealthPos when moved
+    radar = { enabled = true, sound = "fsEnemy", stealthSound = "fsAlarm", stealthWarning = true, stealthTime = 6,
+        autoList = true, listRows = 6, timeout = 60, quietResting = true, hideEmpty = false,
+        bgMode = "stealth",
+        targetMe = true, targetSound = "fsTarget", targetWarning = true,   -- an enemy targeting you
+        levels = {},   -- enemy name -> level last read (shown when the game hides it, 10+ above you)
+        shareListen = true, shareSend = true, shareSpy = false },   -- shareSend: our channel; shareSpy: also Spy's format   -- levels from Spy users' messages; own sightings to group / guild   -- battlegrounds and arenas: off, stealth (only stealthed enemies) or all
+    tooltip = { enabled = true, sellValue = true, counts = true, gather = true, beasts = true,
+        disenchant = true, deOnlyEnchanter = false },   -- disenchant results (Disenchant.lua)
     beasts = { known = {}, names = {} },   -- Beasts.lua: [name-realm] = { [ability] = rank }, names in the client's language
     items = {},     -- [realm]["Faction:Name"] = { class, bags = { [itemID] = count }, bank = { ... } }
     session = {},   -- [name-realm] = gold and XP of the running session, kept over /reload
     language = "auto",
+    versionCheck = true,   -- tell the group and guild our version, point out a newer one (Comm.lua)
     motion = "full",    -- animations: full, reduced (warnings animate once) or off
     gold = {},   -- [realm][faction][name] = { money, class }
 }
@@ -416,6 +432,9 @@ function ns.Refresh()
     if ns.CastBar then ns.CastBar:Refresh() end
     if ns.MinimapShape then ns.MinimapShape:Apply() end
     if ns.Ring then ns.Ring.RefreshAll() end
+    -- questing together: its window and the group's XP (on / off, in a window of its own) follow at once
+    if ns.Together and ns.Together.Changed then ns.Debug.Call("Together", ns.Together.Changed, ns.Together) end
+    if ns.GroupXP and ns.GroupXP.Update then ns.Debug.Call("GroupXP", ns.GroupXP.Update, ns.GroupXP) end
 end
 
 ns.On("ADDON_LOADED", function(_, name)

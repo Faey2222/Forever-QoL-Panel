@@ -1,17 +1,24 @@
-### Forever QoL Panel 1.7.1 – Minimap rings and a tidier options window
+### Forever QoL Panel 1.8.0 – Questing together, enemy radar and a pet XP bar
 
 #### New
-- **XP and reputation around the minimap:** both bars can run as rings around the minimap, in the bar's look with its border, colours, tick marks and tooltip; all six looks of finished quests work on the ring. The reputation ring goes outside the XP ring (one shared border at 0 px). Width and distance adjustable for each
-- **Square minimap:** round as in the game, or square with a border in the panel's classic or modern look; minimap buttons line up along the square, the XP and reputation rings follow as square frames
-- **Minimap elements:** the game's zone name, clock, time of day / calendar, tracking, Addons button and the coordinates can be hidden
-- **New panel elements:** Tracking (what the minimap tracks, a click switches it, short names or just the icon) and WIM whispers (new messages at a glance, WIM's menu on a click, with WIM 3 installed; WIM's own minimap button can be hidden)
-- **Mail element:** optionally no text while there is no mail
-- **Options window:** tabs – XP and reputation bar share one page, and Elements, Loot optimizer and Warnings are split into tabs; the Minimap page is reorganised
-- **Quest tooltip:** finished quests show their share of the level in percent
+- **Questing together:** in a group, members using the addon share their quests and progress
+  - a window lists the quests the group is working on, with everyone's progress, class colours and icons; quest titles in the colour of their difficulty, a click opens the quest in the quest log
+  - quests someone lacks: a button in the window's title bar with their number, sorted by zone; shared quests are accepted automatically, quests the game refuses (a quest before it is missing) are marked as not shareable, quests someone already has or turned in are no longer offered
+  - a sound and a golden glow when all are done; a quest stays until all have turned it in. Someone turns it in and others have not after 60 seconds: a sound, the quest pulses red and a note says who turned it in and who has not, until the group leader confirms it
+  - members too far away for the kill are dimmed ("too far away")
+  - the group leader can hide a quest for everyone or pick one for the window
+  - Blizzard's quest tracker can fold up while most of the group uses the addon
+- **Group XP:** everyone's level and XP in the look of the panel's XP bar, with finished quests not turned in yet; free bag slots and, for hunters, their ammunition (low ammunition glows red). At the top of the quest window or in a window of its own
+- **Enemy radar:** enemy players nearby in a list (a click targets them), with level, class and how long ago; separate warnings with their own sounds and keybindings for stealthed enemies and for enemies targeting you; quieter in battlegrounds; sightings shared with your group and guild (compatible with Spy)
+- **Pet XP bar for hunters:** beside the panel, attached, around the minimap, free with its own size, or below the pet portrait
+- **Disenchanting:** the item tooltip shows what disenchanting gives (with chances) and the skill it needs; optionally only for enchanters
+- **Loot optimizer:** only suggests items your class can wear
+- **Options:** what a version brings is marked with the game's turquoise diamond – behind a new setting, on its tab and on its page
 
 #### Fixes
-- **What's new:** lists every new feature of this version with all its settings (1.7.0 showed only a few)
-- **Characters:** Forever's client no longer reports the realm name, so characters landed in a group without a realm (missing gold in the tooltip, no alts in the mail list); the realm is now found another way and the duplicates are merged
-- **Panel:** with no bar in the panel it can be brought back after folding
+- **Tooltips:** grey lines are brighter and easier to read; the comparison and disenchanting tooltip is never narrower than its text and no longer lets the background shine through
+- **Options:** tabs always fit the window
+
+Sounds: freesound.org (CC0).
 
 Ideas, wishes or bugs? Let us know on CurseForge or GitHub.

@@ -133,17 +133,488 @@ do
     assert(WIM3MinimapButton:IsShown(), "WIM minimap button not back")
     WIM, LibStub = nil, realLS
 end
+-- class-bound items: only offered to the classes named in the tooltip
+do
+    local realTI, realCA = C_TooltipInfo, ITEM_CLASSES_ALLOWED
+    ITEM_CLASSES_ALLOWED = "Klassen: %s"
+    local lines = { { leftText = "Maske" }, { leftText = "Klassen: Schurke" } }
+    C_TooltipInfo = { GetHyperlink = function() return { lines = lines } end }
+    assert(ns.LootOpt.ClassAllowed("|Hitem:70001::|h[Maske]|h") == false, "rogue mask allowed for another class")
+    local mine = UnitClass("player")
+    lines[2].leftText = "Klassen: Schurke, " .. mine
+    assert(ns.LootOpt.ClassAllowed("|Hitem:70002::|h[Maske]|h") == true, "item of the own class not allowed")
+    assert(ns.LootOpt.ClassAllowed("|Hitem:70003::|h[Helm]|h") == true, "item without classes")
+    C_TooltipInfo, ITEM_CLASSES_ALLOWED = realTI, realCA
+end
+-- the hunter pet's XP bar in its five places
+do
+    local P = ForeverQoLPanelDB.panel
+    local realUE, realGPE = UnitExists, GetPetExperience
+    UnitExists = function(u) return u == "pet" or (realUE and realUE(u)) end
+    GetPetExperience = function() return 300, 1200 end
+    local saveRep, saveXP = P.repPlace, P.xpPlace
+    P.petBar, P.xpPlace, P.repPlace = true, "panel", "attach"
+    local D, bar = ns.Dock, ForeverQoLPanelPetBar
+    P.petPlace = "side"; ns.Refresh()
+    assert(D:PetMode() == "side" and bar:IsShown() and D:RepMode() == "below", "pet bar beside the XP bar")
+    assert(bar:GetParent() == D and ns.PetXP.w < P.barWidth / 2, "pet bar share of the width")
+    P.petPlace = "attach"; ns.Refresh()
+    assert(D:PetMode() == "attach" and bar:IsShown() and D:RepMode() == "below", "pet bar hanging from the XP bar")
+    P.petPlace = "free"; ns.Refresh()
+    assert(D:PetMode() == "free" and ForeverQoLPanelPetHolder:IsShown(), "free pet bar")
+    assert(D:RepMode() == "attach", "reputation bar not back")
+    PetFrame = CreateFrame("Frame", "PetFrame", UIParent); PetFrame:SetSize(128, 50)
+    P.petPlace = "portrait"; ns.Refresh()
+    assert(D:PetMode() == "portrait" and ForeverQoLPanelPetHolder:IsShown(), "pet bar below the portrait")
+    assert(ns.PetXP.w == 128, "pet bar as wide as the pet's frame: " .. tostring(ns.PetXP.w))
+    P.petPortraitWidth = 90; ns.Refresh()
+    assert(ns.PetXP.w == 90, "pet bar width below the portrait")
+    P.petPortraitWidth = 0
+    P.petPlace = "minimap"; ns.Refresh()
+    assert(D:PetMode() == "minimap" and ForeverQoLPanelPetRing and ForeverQoLPanelPetRing:IsShown(), "pet ring")
+    -- with the XP ring there, the pet's ring cannot be: it hangs from the XP bar's place instead
+    P.xpPlace = "minimap"; ns.Refresh()
+    assert(not ForeverQoLPanelPetRing:IsShown() and D:PetMode() ~= "minimap", "pet ring together with the XP ring")
+    P.petBar, P.xpPlace, P.repPlace = false, saveXP, saveRep
+    UnitExists, GetPetExperience, PetFrame = realUE, realGPE, nil
+    ns.Refresh()
+    assert(not bar:IsShown() and not ForeverQoLPanelPetHolder:IsShown(), "pet bar left")
+end
+-- disenchanting: the results by quality, item level and kind, the lines for the tooltip
+do
+    local DE = ns.Disenchant
+    local r, skill = DE.Results(2, 22, 4)
+    assert(r and r[1][1] == 10940 and r[1][2] == 75 and skill == 25, "green armour disenchant")
+    r = DE.Results(2, 22, 2)
+    assert(r[1][1] == 10998 and r[1][2] == 75, "green weapon disenchant: essence first")
+    r = DE.Results(3, 60, 4)
+    assert(#r == 2 and r[2][1] == 20725, "blue item with nexus crystal")
+    assert(DE.Results(4, 30, 4) == nil and DE.Results(1, 30, 4) == nil and DE.Results(2, 30, 15) == nil, "not disenchantable")
+    local realInfo = ns.ItemInfo
+    ns.ItemInfo = function(x)
+        if x == "|Hitem:12345::|h[Gürtel]|h" then return "Gürtel", nil, 2, 33, 30, nil, nil, nil, "INVTYPE_WAIST", 1, 100, 4, 2 end
+        return "Mat", nil, 1, 1, 1, nil, nil, nil, "", 134000
+    end
+    local lines = DE.Lines("|Hitem:12345::|h[Gürtel]|h")
+    assert(lines and #lines == 5, "disenchant tooltip lines: " .. tostring(lines and #lines))
+    ForeverQoLPanelDB.tooltip.deOnlyEnchanter = true
+    local realRank = ns.Tooltip.Rank
+    ns.Tooltip.Rank = function() return 0 end
+    assert(DE.Lines("|Hitem:12345::|h[Gürtel]|h") == nil, "disenchant shown without enchanting")
+    ForeverQoLPanelDB.tooltip.deOnlyEnchanter = false
+    ns.ItemInfo, ns.Tooltip.Rank = realInfo, realRank
+end
+-- enemy radar: new enemies with a sound, stealth with another sound and the warning, the element's text and list
+do
+    local R, played = ns.Radar, {}
+    local realPS = ns.Warnings.PlaySound
+    ns.Warnings.PlaySound = function(s) played[#played + 1] = s end
+    ForeverQoLPanelDB.radar.quietResting = false
+    R:Seen("Grimbash", "WARRIOR", 27)
+    assert(R:Count() == 1 and played[1] == ForeverQoLPanelDB.radar.sound, "new enemy sound")
+    R:Seen("Grimbash", "WARRIOR", 27)
+    assert(#played == 1, "known enemy announced again")
+    R:Seen("Shadevex", "ROGUE", 26, true)
+    assert(played[2] == ForeverQoLPanelDB.radar.stealthSound and ForeverQoLPanelStealthWarning:IsShown(), "stealth alert")
+    assert(ForeverQoLPanelStealthTarget:IsShown() and ForeverQoLPanelStealthTarget:GetAttribute("macrotext") == "/targetexact Shadevex",
+        "stealth warning does not target: " .. tostring(ForeverQoLPanelStealthTarget:GetAttribute("macrotext")))
+    local list = R:Sorted()
+    assert(list[1].name == "Shadevex", "stealthed enemy not on top")
+    -- a skull: at least your level + 10; later the real level is remembered for the name
+    R:Seen("Totenkopf", "WARRIOR", -1)
+    local me = UnitLevel("player")
+    assert(R.LevelText(R.list.Totenkopf) == (math.min(me + 10, MAX_PLAYER_LEVEL or 60) .. "+"), "skull level: " .. R.LevelText(R.list.Totenkopf))
+    R:Seen("Totenkopf", "WARRIOR", 44)
+    assert(R.LevelText(R.list.Totenkopf) == "44" and ForeverQoLPanelDB.radar.levels.Totenkopf == 44, "real level not kept")
+    R.list.Totenkopf = nil
+    R:Seen("Totenkopf", "WARRIOR", -1)
+    assert(R.LevelText(R.list.Totenkopf) == "44", "known level not used for a skull")
+    R.list.Totenkopf = nil
+    -- a Spy user in the guild reports an enemy with its real level: taken over
+    R:Seen("Hochkant", "MAGE", -1)
+    R:Received("[Spy]", "1.3.8|Hochkant-Stein|MAGE|52||Elwynn|||||", "GUILD", "Gildenfreund")
+    assert(R.LevelText(R.list.Hochkant) == "52", "level from a Spy user: " .. R.LevelText(R.list.Hochkant))
+    R.list.Hochkant = nil
+    -- Spy still installed: its stored levels once
+    SpyPerCharDB = { PlayerData = { ["Altbekannt-Fels"] = { level = 58, isGuess = false }, Geraten = { level = 40, isGuess = true } } }
+    ForeverQoLPanelDB.radar.spyImported = nil
+    R:ImportSpy()
+    assert(ForeverQoLPanelDB.radar.levels.Altbekannt == 58 and not ForeverQoLPanelDB.radar.levels.Geraten, "Spy import")
+    SpyPerCharDB = nil
+    -- sharing on: a new sighting is sent in Spy's format
+    local sentMsgs = {}
+    C_ChatInfo = C_ChatInfo or {}
+    local realSend = C_ChatInfo.SendAddonMessage
+    C_ChatInfo.SendAddonMessage = function(prefix, msg, ch) sentMsgs[#sentMsgs + 1] = { prefix, msg, ch } end
+    local realGuild = IsInGuild
+    IsInGuild = function() return true end
+    local realInst = IsInInstance; IsInInstance = function() return false, "none" end
+    ForeverQoLPanelDB.radar.shareSend, ForeverQoLPanelDB.radar.shareSpy = true, true
+    R:Share({ name = "Zeiger", full = "Zeiger-Berg", class = "HUNTER", level = 33 })
+    local spyMsg, ownMsg
+    for _, m in ipairs(sentMsgs) do
+        if m[1] == "[Spy]" then spyMsg = m[2] elseif m[1] == "FQP" then ownMsg = m[2] end
+    end
+    assert(spyMsg and spyMsg:find("^0%.0%.1|Zeiger%-Berg|HUNTER|33|"), "share message in Spy's format")
+    assert(ownMsg and ownMsg:find("^S|Zeiger|Zeiger%-Berg|HUNTER|33|"), "share message on our channel: " .. tostring(ownMsg))
+    -- a stealthed one goes only to our channel, with its flag
+    ns.Comm:Flush()
+    sentMsgs = {}
+    R:Share({ name = "Zeiger", full = "Zeiger-Berg", class = "HUNTER", level = 33 }, "s")
+    ns.Comm:Flush()
+    assert(#sentMsgs == 1 and sentMsgs[1][1] == "FQP" and sentMsgs[1][2]:find("|s$"), "stealth sighting share")
+    ForeverQoLPanelDB.radar.shareSend, ForeverQoLPanelDB.radar.shareSpy = false, false
+    C_ChatInfo.SendAddonMessage, IsInGuild, IsInInstance = realSend, realGuild, realInst
+    -- another user reports a stealthed enemy in your zone: into the list, with the warning; a plain one quietly
+    local zone = GetZoneText and GetZoneText() or ""
+    played = {}
+    ns.Comm:Received("FQP", "S|Lauerer|Lauerer-Busch|ROGUE|29|" .. zone .. "|s", "GUILD", "Freundin-Hain")
+    assert(R.list.Lauerer and R.list.Lauerer.stealth and R.list.Lauerer.reported == "Freundin", "reported stealthed enemy")
+    assert(played[#played] == ForeverQoLPanelDB.radar.stealthSound, "reported stealth without its sound")
+    local n = #played
+    ns.Comm:Received("FQP", "S|Wanderer||WARRIOR|30|" .. zone .. "|", "GUILD", "Freundin-Hain")
+    assert(R.list.Wanderer and #played == n, "reported plain enemy not quiet")
+    ns.Comm:Received("FQP", "S|Fernab||MAGE|31|Anderswo|", "GUILD", "Freundin-Hain")
+    assert(not R.list.Fernab and ForeverQoLPanelDB.radar.levels.Fernab == 31, "enemy from another zone")
+    R.list.Lauerer, R.list.Wanderer = nil, nil
+    -- a newer version among the others: said once
+    local said = 0
+    local realPrint = print
+    print = function(msg) if tostring(msg):find("1%.99%.0") then said = said + 1 end end
+    ns.Comm.told = nil
+    ns.Comm:Received("FQP", "V|1.99.0", "GUILD", "Freundin-Hain")
+    ns.Comm:Received("FQP", "V|1.99.0", "GUILD", "Freundin-Hain")
+    print = realPrint
+    assert(said == 1, "version hint: " .. said)
+    assert(ns.Elements.defs.radar.text():find("2"), "radar element text: " .. ns.Elements.defs.radar.text())
+    -- seen through a nameplate: an enemy player becomes an entry
+    local realUE, realUIP, realUIE, realUN, realUC, realUL = UnitExists, UnitIsPlayer, UnitIsEnemy, UnitName, UnitClass, UnitLevel
+    UnitExists = function(u) return u == "nameplate3" end
+    UnitIsPlayer = function() return true end
+    UnitIsEnemy = function() return true end
+    UnitName = function(u) if u == "nameplate3" then return "Plattenmann" end return realUN(u) end
+    UnitClass = function(u) if u == "nameplate3" then return "Paladin", "PALADIN" end return realUC(u) end
+    UnitLevel = function(u) if u == "nameplate3" then return 30 end return realUL(u) end
+    R.plates.nameplate3 = true
+    -- in a battleground with "only stealth" a plain enemy is not listed
+    local realII = IsInInstance
+    IsInInstance = function() return true, "pvp" end
+    R:ScanAll()
+    assert(not R.list.Plattenmann, "plain enemy listed in a battleground")
+    IsInInstance = realII
+    R:ScanAll()
+    assert(R.list.Plattenmann and R.list.Plattenmann.class == "PALADIN", "enemy from a nameplate")
+    -- the enemy takes you as its target: its own sound and the warning
+    local realUIU = UnitIsUnit
+    UnitIsUnit = function(a, b) return a == "nameplate3target" and b == "player" end
+    local before = #played
+    R:Scan("nameplate3")
+    assert(R.list.Plattenmann.targetsMe and played[before + 1] == ForeverQoLPanelDB.radar.targetSound, "targets me")
+    assert(ForeverQoLPanelAttackerTarget:GetAttribute("macrotext") == "/targetexact Plattenmann", "targets-me warning not clickable")
+    assert(ForeverQoLPanelTargetWarning:IsShown() and ForeverQoLPanelStealthWarning:IsShown(), "both warnings at once")
+    assert(ForeverQoLPanelTargetWarning.text:GetText():find("%(30%)"), "level missing in the warning: " .. tostring(ForeverQoLPanelTargetWarning.text:GetText()))
+    assert(ForeverQoLPanelStealthTarget:GetAttribute("macrotext") ~= "/targetexact Plattenmann", "stealth target overwritten")
+    R:Scan("nameplate3")
+    assert(#played == before + 1, "targets-me sound repeated at once")
+    -- a new enemy that targets you at once: only the targets-you sound, not the new-enemy one too
+    R.list.Plattenmann = nil
+    before = #played
+    R:Scan("nameplate3")
+    assert(#played == before + 1 and played[#played] == ForeverQoLPanelDB.radar.targetSound, "two sounds for a new enemy targeting you")
+    UnitIsUnit = realUIU
+    -- a target long out of sight does not keep an enemy in the list
+    local realVis = UnitIsVisible
+    UnitIsVisible = function() return false end
+    R.list.Plattenmann = nil
+    R:Scan("nameplate3")
+    assert(not R.list.Plattenmann, "enemy out of sight counted")
+    UnitIsVisible = realVis
+    R:Scan("nameplate3")
+    -- a secret name is skipped
+    local S = {}; MOCK_secret[S] = true
+    UnitName = function(u) if u == "nameplate3" then return S end return realUN(u) end
+    R.list.Plattenmann = nil
+    R:Scan("nameplate3")
+    assert(not R.list.Plattenmann, "secret name used")
+    MOCK_secret[S] = nil
+    UnitExists, UnitIsPlayer, UnitIsEnemy, UnitName, UnitClass, UnitLevel = realUE, realUIP, realUIE, realUN, realUC, realUL
+    R.plates.nameplate3 = nil
+    -- the list below the element when the element is on the panel
+    ForeverQoLPanelDB.panel.items.radar = true; ns.Refresh()
+    ns.Elements.cells.radar.IsVisible = function() return true end
+    R:UpdateList()
+    assert(ForeverQoLPanelRadarList:IsShown(), "radar list not open")
+    R:Toggle(); assert(not ForeverQoLPanelRadarList:IsShown(), "radar list not closed by a click")
+    -- the test fills and overflows the list
+    for _, fn in ipairs(MOCK_timers or {}) do end
+    R:Test()
+    assert(R.testing and R.pinned, "radar test not started")
+    ForeverQoLPanelDB.panel.items.radar = false
+    R.list = {}; R:Changed()
+    ns.Warnings.PlaySound = realPS
+    ForeverQoLPanelDB.radar.quietResting = true
+end
+-- questing together: the group's quests over our channel, what someone lacks, the quests actually worked on
+do
+    local T = ns.Together
+    local realIG, realUN, realUC, realLeader = IsInGroup, UnitName, UnitClass, UnitIsGroupLeader
+    IsInGroup = function() return true end
+    UnitName = function(u) if u == "party1" then return "Partner" end return realUN(u) end
+    UnitClass = function(u) if u == "party1" then return "Mage", "MAGE" end return realUC(u) end
+    UnitIsGroupLeader = function(u) return u == "party1" end
+    T.members, ForeverQoLPanelDB.together.state = {}, nil
+    -- Forever's names: first and last name; your last name is never a member of its own, names shorten when narrow
+    local realUNp = UnitName
+    UnitName = function(u)
+        if u == "player" then return "Abrakadabra", "Alfred" end
+        if u == "party1" then return "Partner", "Stein" end
+        return realUNp(u)
+    end
+    local meName = UnitName("player")
+    assert(T.ShowName("Partner", 300) == "Partner S." and T.ShowName("Partner", 400) == "Partner Stein", "short names")
+    T.mine = { [100] = { done = false, prog = "2/8", title = "Wölfe" }, [200] = { done = false, prog = "0/1", title = "Brief" } }
+    -- the partner has quest 100 only: 200 is missing for them
+    ns.Comm:Received("FQP", "Q|100|0|2/8", "PARTY", "Partner")
+    local missing = T:Missing()
+    assert(#missing == 1 and missing[1].id == 200 and missing[1].missing[1] == "Partner", "missing quest for the partner")
+    -- sharing: the game says the partner already has it -> no longer offered
+    ERR_QUEST_PUSH_ONQUEST_S = "%s hat diese Quest bereits."
+    ERR_QUEST_PUSH_INVALID_S = "%s kann diese Quest nicht annehmen."
+    T.Share(200)
+    T:SystemMessage("Partner Stein hat diese Quest bereits.")
+    assert(#T:Missing() == 0, "a quest the partner already has is still offered")
+    T.blocked = {}
+    -- the partner's addon reports that the game refused it -> listed, but not shareable
+    T.Share(200)
+    ns.Comm:Received("FQP", "N|200", "PARTY", "Partner")
+    local refused = T:Missing()
+    assert(#refused == 1 and refused[1].pushable == false, "a refused quest is still shareable")
+    T.blocked = {}
+    -- shared with us through the addon: its window is accepted; a refusal naming the title goes back to the sharer
+    local accepted, realAQ, realGQ, realGT = false, AcceptQuest, GetQuestID, GetTitleText
+    AcceptQuest = function() accepted = true end
+    GetQuestID = function() return 555 end
+    GetTitleText = function() return "Tharil'zun" end
+    ns.Comm:Received("FQP", "U|555|Tharil'zun", "PARTY", "Partner")
+    T:QuestDetail()
+    assert(accepted, "a shared quest was not accepted")
+    ns.Comm:Received("FQP", "U|556|Oh Bruder", "PARTY", "Partner")
+    T:SystemMessage('Der Versuch von Partner Stein, die Quest "Oh Bruder" zu teilen, ist fehlgeschlagen.')
+    assert(T.expect == nil, "the game's refusal was not noticed")
+    AcceptQuest, GetQuestID, GetTitleText = realAQ, realGQ, realGT
+    -- by zone: the zone you are in first, then by name, "Other" last
+    local realZT = GetRealZoneText
+    GetRealZoneText = function() return "Mitte" end
+    local zg = T.ByZone({ { id = 1, title = "a", zone = "Zeta" }, { id = 2, title = "b" }, { id = 3, title = "c", zone = "Alpha" },
+        { id = 4, title = "d", zone = "Mitte" } })
+    assert(zg[1].zone == "Mitte" and zg[2].zone == "Alpha" and zg[3].zone == "Zeta" and zg[4].zone == ns.L.TOG_OTHER_ZONE, "zone order")
+    GetRealZoneText = realZT
+    -- the missing quests: a button in the title bar with their number (no list in the window any more)
+    T.mine[200].zone = "Wald"
+    T:UpdateWindow()
+    local mb = ForeverQoLPanelTogether.missBtn
+    assert(mb:IsShown() and tostring(mb.badge.text:GetText()) == "1", "missing button: " .. tostring(mb.badge.text:GetText()))
+    -- a quest's title opens it in the quest log (here: the plain way, the mock knows no quest window)
+    local opened, realTQL = false, ToggleQuestLog
+    ToggleQuestLog = function() opened = true end
+    T.OpenQuest(200)
+    assert(opened, "quest log not opened")
+    ToggleQuestLog = realTQL
+    -- the partner turned quest 200 in already: "turned in", not offered to share
+    ns.Comm:Received("FQP", "D|200", "PARTY", "Partner")
+    assert(#T:Missing() == 0, "a quest the partner turned in is still offered")
+    T.turnedIn = {}
+    -- we hold a quest the partner reports, but it is turned in already: we tell them (D)
+    local sentD, realSAM = nil, C_ChatInfo.SendAddonMessage
+    C_ChatInfo.SendAddonMessage = function(_, msg) if msg:sub(1, 1) == "D" then sentD = msg end end
+    local realFlag = C_QuestLog.IsQuestFlaggedCompleted
+    C_QuestLog.IsQuestFlaggedCompleted = function(id) return id == 777 end
+    ns.Comm:Received("FQP", "B|777:0:1/5;100:0:2/8", "PARTY", "Partner")
+    ns.Comm:Flush()
+    assert(sentD == "D|777", "turned-in quest not reported: " .. tostring(sentD))
+    assert(T.members.Partner.quests[777] and T.members.Partner.quests[777].prog == "1/5", "bundle not read")
+    C_QuestLog.IsQuestFlaggedCompleted, C_ChatInfo.SendAddonMessage = realFlag, realSAM
+    T.members.Partner.quests[777] = nil
+    -- the bundle of all our quests goes out in one message
+    local bundles = {}
+    C_ChatInfo.SendAddonMessage = function(_, msg) if msg:sub(1, 1) == "B" then bundles[#bundles + 1] = msg end end
+    T:SendAll(true); ns.Comm:Flush()
+    C_ChatInfo.SendAddonMessage = realSAM
+    assert(#bundles == 1 and bundles[1]:find("100:0:2/8", 1, true) and bundles[1]:find("200:0:0/1", 1, true), "bundle: " .. tostring(bundles[1]))
+    -- nobody moved yet: no quest is active
+    assert(not next(ForeverQoLPanelDB.together.state.active), "quest active without progress")
+    -- the partner makes progress: the quest becomes active for the group, the window shows it
+    ns.Comm:Received("FQP", "Q|100|0|3/8", "PARTY", "Partner")
+    assert(ForeverQoLPanelDB.together.state.active[100], "progress does not make the quest active")
+    assert(ForeverQoLPanelTogether and ForeverQoLPanelTogether:IsShown(), "group quests window not shown")
+    -- my own progress on a quest only I have: not active (it needs two holders)
+    T:ApplyMine({ [100] = { done = false, prog = "2/8", title = "Wölfe" }, [200] = { done = false, prog = "1/1", title = "Brief" } })
+    assert(not ForeverQoLPanelDB.together.state.active[200], "a quest of one active")
+    -- both finish quest 100: a sound, it stays until turned in
+    local played, realPSF = {}, PlaySoundFile
+    PlaySoundFile = function(path) played[#played + 1] = path end
+    T:ApplyMine({ [100] = { done = true, prog = "8/8", title = "Wölfe" }, [200] = { done = false, prog = "1/1", title = "Brief" } })
+    assert(ForeverQoLPanelDB.together.state.active[100], "finished by one only, gone already")
+    ns.Comm:Received("FQP", "Q|100|1|8/8", "PARTY", "Partner")
+    local st = ForeverQoLPanelDB.together.state
+    assert(st.active[100] and st.allDone[100], "done by all: gone before turning in")
+    assert(played[1] and played[1]:find("questdone", 1, true), "no sound when all are done")
+    -- the partner turns it in, I do not: the reminder (its timer is not run by the mock), the leader's word ends it
+    ns.Comm:Received("FQP", "T|100", "PARTY", "Partner")
+    ns.Comm:Received("FQP", "R|100", "PARTY", "Partner")
+    assert(T.watch[100] and st.active[100], "turn-in not watched")
+    T:Alarm(100)
+    assert(T.watch[100].alarm and played[2] and played[2]:find("turnin", 1, true), "no reminder")
+    local gave, holding = T:TurnInState(100)
+    assert(gave[1] == "Partner" and holding[1] == meName, "turn-in note: " .. tostring(gave[1]) .. " / " .. tostring(holding[1]))
+    assert(T.notes[100]:IsShown(), "turn-in note not shown")
+    ns.Comm:Received("FQP", "K|100", "PARTY", "Partner")
+    assert(not T.watch[100].alarm and not T.notes[100]:IsShown(), "the leader's word does not end it")
+    -- now I turn it in as well: nobody holds it any more, it folds away for good
+    T:MyTurnIn(100)
+    T:ApplyMine({ [200] = { done = false, prog = "1/1", title = "Brief" } })
+    assert(not st.active[100] and st.finished[100], "turned in by all, still there")
+    PlaySoundFile = realPSF
+    T.mine[100] = { done = true, prog = "8/8", title = "Wölfe" }
+    -- the leader hides a quest for everyone
+    ForeverQoLPanelDB.together.state.active[300] = true
+    ns.Comm:Received("FQP", "H|300", "PARTY", "Partner")
+    assert(not ForeverQoLPanelDB.together.state.active[300] and ForeverQoLPanelDB.together.state.hidden[300], "leader's hide")
+    assert(ns.Elements.defs.together.text():find("1"), "together element text: " .. ns.Elements.defs.together.text())
+    -- a member's XP arrives: the XP window shows both
+    ns.Comm:Received("FQP", "X|25|3000|10000|500|1200", "PARTY", "Partner")
+    assert(ns.GroupXP.members.Partner.quest == 1200, "quest XP of a member")
+    -- with bag slots and ammunition (a newer version)
+    ns.Comm:Received("FQP", "X|25|3000|10000|500|1200|7|80|150", "PARTY", "Partner")
+    assert(ns.GroupXP.members.Partner.free == 7 and ns.GroupXP.members.Partner.ammo == 150, "bags and ammo of a member")
+    -- a narrow row: ammunition and bag slots step aside, the name keeps some room
+    local host = CreateFrame("Frame")
+    ns.GroupXP:Render(host, { { name = "Partner", level = 25, xp = 3000, max = 10000, rested = 0, quest = 0, free = 7, slots = 80, ammo = 150 } }, 150)
+    assert(host.xpRows[1].ammo:GetText() == "" and host.xpRows[1].bags:GetText() == "", "narrow row keeps bags and ammo")
+    ns.GroupXP:Render(host, { { name = "Partner", level = 25, xp = 3000, max = 10000, rested = 0, quest = 0, free = 7, slots = 80, ammo = 150 } }, 400)
+    assert(host.xpRows[1].ammo:GetText() ~= "" and host.xpRows[1].bags:GetText() ~= "", "wide row lost bags and ammo")
+    assert(ns.GroupXP.members.Partner and ns.GroupXP.members.Partner.level == 25 and ForeverQoLPanelTogether.xp:IsShown(), "group XP in the quest window")
+    ForeverQoLPanelDB.together.xpSeparate = true; ns.GroupXP:Update()
+    assert(ForeverQoLPanelGroupXP:IsShown() and not ForeverQoLPanelTogether.xp:IsShown(), "group XP in its own window")
+    ForeverQoLPanelDB.together.xpSeparate = false; ns.GroupXP:Update()
+    -- most of the group uses the addon (you and the partner of two): Blizzard's tracker folds up, and back afterwards
+    local trk = { c = false }
+    trk.IsCollapsed = function(self) return self.c end
+    trk.SetCollapsed = function(self, on) self.c = on end
+    ObjectiveTrackerFrame = trk
+    T:CheckTracker()
+    assert(trk.c == true, "tracker not folded")
+    ForeverQoLPanelDB.together.minimizeTracker = false; T:CheckTracker()
+    assert(trk.c == false, "tracker not unfolded")
+    ForeverQoLPanelDB.together.minimizeTracker = true
+    ObjectiveTrackerFrame = nil
+    -- a test quest from someone's development copy is never taken for a real one
+    ns.Comm:Received("FQP", "P|900004", "PARTY", "Partner")
+    ns.Comm:Received("FQP", "A|900005,-900006", "PARTY", "Partner")
+    assert(not ForeverQoLPanelDB.together.state.active[900004] and not ForeverQoLPanelDB.together.state.active[900005], "a test quest got in")
+    -- the leader picks a quest; a new member gets the leader's active quests
+    ns.Comm:Received("FQP", "P|200", "PARTY", "Partner")
+    assert(ForeverQoLPanelDB.together.state.active[200], "leader's pick")
+    ForeverQoLPanelDB.together.state.active[200] = nil
+    ns.Comm:Received("FQP", "A|200,-400", "PARTY", "Partner")
+    assert(ForeverQoLPanelDB.together.state.active[200] and ForeverQoLPanelDB.together.state.hidden[400], "leader's active list")
+    -- the window's rows: you, the partner, nobody named after your last name
+    local rowNames = {}
+    for _, blk in pairs(ForeverQoLPanelTogether.blocks) do
+        for _, rw in ipairs(blk.rows) do if rw.name:IsShown() then rowNames[#rowNames + 1] = rw.name:GetText() end end
+    end
+    for _, n in ipairs(rowNames) do assert(n ~= "Alfred", "own last name as a member") end
+    IsInGroup, UnitName, UnitClass, UnitIsGroupLeader = realIG, realUN, realUC, realLeader
+    T:RosterChanged()
+    -- the test: a made-up partner, the window and the element without a real group, everything back afterwards
+    local before = T.mine
+    T:Test()
+    -- started, no quest yet: the window is there with its hint
+    assert(ForeverQoLPanelTogether:IsShown() and ForeverQoLPanelTogether.empty:IsShown(), "window without a quest")
+    -- nothing of the test reaches the group (made-up quests must not show up at real members)
+    local leaked, realSAM2, realIG2 = {}, C_ChatInfo.SendAddonMessage, IsInGroup
+    IsInGroup = function() return true end
+    C_ChatInfo.SendAddonMessage = function(_, msg) leaked[#leaked + 1] = msg end
+    T:TestAdd(); T:TestAdd(); T:TestAdd()
+    ns.Comm:Flush()
+    C_ChatInfo.SendAddonMessage, IsInGroup = realSAM2, realIG2
+    assert(#leaked == 0, "the test sent to the group: " .. tostring(leaked[1]))
+    assert(ForeverQoLPanelDB.together.state.active[900001] and ForeverQoLPanelTogether:IsShown(), "together test window")
+    assert(T:Missing()[1] and T:Missing()[1].id == 900003, "third test quest missing for the partner")
+    assert(ForeverQoLPanelTogether.xp:IsShown(), "group XP in the test")
+    T:TestUpdate()
+    T:TestFinish()
+    local tst = ForeverQoLPanelDB.together.state
+    assert(tst.active[900001] and tst.allDone[900001], "test quest done by both, but not marked")
+    -- the partner turns it in (the reminder), then I do: gone for good
+    T:TestPartnerTurnIn()
+    assert(T.watch[900001] and T.turnedIn[T.TEST_NAME][900001], "partner's turn-in in the test")
+    T:Alarm(900001)
+    assert(T.notes[900001]:IsShown(), "test turn-in note")
+    -- a second quest waiting at the same time: its note stands below the first, not over it
+    local second = 900002
+    local rest = {}
+    for k, v in pairs(T.mine) do if k ~= second then rest[k] = v end end
+    T:MyTurnIn(second)
+    T:ApplyMine(rest)
+    assert(T.watch[second], "second turn-in not watched")
+    T:Alarm(second)
+    local n1, n2 = T.notes[900001], T.notes[second]
+    assert(n1:IsShown() and n2:IsShown(), "both notes shown")
+    local _, rel = n2:GetPoint(1)
+    assert(rel == n1, "second note not below the first")
+    -- after my own turn-in the note still knows the quest's name
+    assert(not tostring(n2.title:GetText()):find("^#"), "turned-in quest lost its title: " .. tostring(n2.title:GetText()))
+    T:Acknowledge(second)
+    T:Acknowledge(900001)   -- in the test you lead
+    assert(not T.notes[900001]:IsShown(), "test note not confirmed")
+    T:TestMyTurnIn()
+    assert(not tst.active[900001] and tst.finished[900001], "test quest not finished")
+    -- too far away: the partner's rows dim
+    T:TestFar()
+    local farShown = false
+    for _, blk in pairs(ForeverQoLPanelTogether.blocks) do
+        for _, rw in ipairs(blk.rows) do if rw.far:IsShown() then farShown = true end end
+    end
+    assert(farShown, "too far away not shown")
+    T:TestFar()
+    T:Test()   -- the same button ends it
+    assert(T.mine == before and not T.testing, "together test not cleaned up")
+    assert(not next(T.members) and not ForeverQoLPanelDB.together.state, "group left, not forgotten")
+end
+-- the settings the newest version brought carry the "new" mark, and so does their page in the navigation
+do
+    local fresh = ns.Options.FreshSettings()
+    local tog
+    for _, p in ipairs(ns.Options.PAGES) do if p.title == "SEC_TOGETHER" then tog = p end end
+    assert(tog and ns.Options.PageIsNew(tog, fresh), "the together page is not marked new")
+    -- a feature new as a whole: marked in the navigation only, not on its settings
+    local specs = ns.Options.Compact(tog.build())
+    ns.Options.MarkPage(tog, specs, fresh)
+    for _, sp in ipairs(specs) do assert(not sp.isNew, "a setting of a whole new feature is marked") end
+    -- a new setting on an older page (the tooltip's disenchant info): marked there
+    local ttPage
+    for _, p in ipairs(ns.Options.PAGES) do
+        for _, sp in ipairs(p.build and ns.Options.Compact(p.build()) or {}) do if sp.key == "disenchant" then ttPage = p end end
+    end
+    assert(ttPage and not ns.Options.FeatureIsNew(ttPage, fresh) and ns.Options.PageIsNew(ttPage, fresh), "disenchant page")
+    local ttSpecs = ns.Options.Compact(ttPage.build())
+    ns.Options.MarkPage(ttPage, ttSpecs, fresh)
+    local marked = false
+    for _, sp in ipairs(ttSpecs) do if sp.key == "disenchant" and sp.isNew then marked = true end end
+    assert(marked, "a new setting is not marked")
+end
 -- XP and reputation bar share a page with a tab each; the second tab shows the reputation settings
 do
     local idx
     for i, p in ipairs(ns.Options.PAGES) do if p.title == "SEC_BARS" then idx = i end end
-    assert(idx and #ns.Options.PAGES[idx].tabs == 2, "bars page with tabs")
+    assert(idx and #ns.Options.PAGES[idx].tabs == 3, "bars page with tabs")
     ns.Options.tabOf = { [idx] = 2 }
     ns.Options:Show(idx)
     local tabs = ns.Options.frame.body.tabs
     assert(tabs[2]:IsShown() and tabs[2].glow:IsShown() and not tabs[1].glow:IsShown(), "reputation tab not chosen")
     -- long pages are split into tabs at their section headers
-    for _, title in ipairs({ "SEC_ELEMENTS", "SEC_WARNINGS", "SEC_LOOTOPT" }) do
+    for _, title in ipairs({ "SEC_ELEMENTS", "SEC_WARNINGS", "SEC_LOOTOPT", "SEC_RADAR" }) do
         local i2
         for i, p in ipairs(ns.Options.PAGES) do if p.title == title then i2 = i end end
         ns.Options.tabOf = { [i2] = 2 }
@@ -549,6 +1020,8 @@ for i = 1, #ns.Options.PAGES do
             CreateFrame = realCF
             local ring = ForeverQoLPanelXPRing
             assert(ring and ring:IsShown() and ns.Dock:XPPlace() == "minimap", "XP ring not shown")
+            -- the ring may exist already (an earlier test): its arcs then
+            if #cds == 0 and ring and ring.arcs then cds = { ring.arcs.log, ring.arcs.rested, ring.arcs.gold, ring.arcs.fill } end
             assert(#cds == 4 and cds[4].share and cds[4].share > 0, "XP ring fill: " .. tostring(cds[4] and cds[4].share))
             assert(ns.Dock:StackMain() ~= "xp", "XP bar still on the panel with the ring")
             -- folded without a bar in the panel, part of it stays at the screen edge for the mouse
@@ -785,9 +1258,9 @@ for i = 1, #ns.Options.PAGES do
         for _ = 1, 30 do ns.Wizard:Go(1) end
         assert(ForeverQoLPanelDB.wizard == ns.VERSION, "wizard not finished")
         ForeverQoLPanelDB.wizard = "0.1.0"; ns.Wizard:Open(false)
-        assert(#ns.Wizard.pages == 24, "update pages: " .. #ns.Wizard.pages)
+        assert(#ns.Wizard.pages == 40, "update pages: " .. #ns.Wizard.pages)
         for i = 1, 8 do ns.Wizard:Jump(i) end
-        ns.Wizard:OpenNews(); assert(#ns.Wizard.pages == 6 and ns.Wizard.pages[2].id == "minimapring" and ns.Wizard.pages[6].id == "optionstabs", "news pages: " .. #ns.Wizard.pages)
+        ns.Wizard:OpenNews(); assert(#ns.Wizard.pages == 17 and ns.Wizard.pages[2].id == "petbar" and ns.Wizard.pages[16].id == "lootclass", "news pages: " .. #ns.Wizard.pages)
         ns.Wizard.frame.tiles[1]:GetScript("OnClick")(ns.Wizard.frame.tiles[1])
         ns.Wizard:Finish()
         SlashCmdList.FOREVERQOLPANEL("reset")

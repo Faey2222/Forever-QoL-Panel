@@ -290,6 +290,44 @@ local function canWear(classID, subID, cls)
     return false
 end
 
+-- Class-bound items ("Classes: Rogue" in the tooltip): only for the classes named there. Read from the item's tooltip
+-- data, the class compared in its male and female name; the answer is kept per item.
+local classOk = {}
+local function classAllowed(link)
+    local id = link and tonumber(tostring(link):match("item:(%d+)"))
+    if not id then return true end
+    if classOk[id] ~= nil then return classOk[id] end
+    local TI = C_TooltipInfo
+    local data = TI and TI.GetHyperlink and select(2, pcall(TI.GetHyperlink, link))
+    if type(data) ~= "table" or type(data.lines) ~= "table" or not ITEM_CLASSES_ALLOWED then return true end
+    local pattern = "^" .. ITEM_CLASSES_ALLOWED:gsub("([%(%)%.%+%-%*%?%[%]%^%$])", "%%%1"):gsub("%%s", "(.+)") .. "$"
+    local _, cls = UnitClass("player")
+    local names = {}
+    for _, t in ipairs({ LOCALIZED_CLASS_NAMES_MALE, LOCALIZED_CLASS_NAMES_FEMALE }) do
+        if t and t[cls] then names[#names + 1] = t[cls] end
+    end
+    local mine = UnitClass("player")
+    if mine then names[#names + 1] = mine end
+    local ok = true
+    for _, line in ipairs(data.lines) do
+        local text = line.leftText
+        if type(text) == "string" and not ns.Secret(text) then
+            local list = text:match(pattern)
+            if list then
+                ok = false
+                for part in list:gmatch("[^,]+") do
+                    part = part:gsub("^%s+", ""):gsub("%s+$", "")
+                    for _, n in ipairs(names) do if part == n then ok = true end end
+                end
+                break
+            end
+        end
+    end
+    classOk[id] = ok
+    return ok
+end
+LO.ClassAllowed = classAllowed
+
 -- equip location -> inventory slots
 local SLOTS = {
     INVTYPE_HEAD = { 1 }, INVTYPE_NECK = { 2 }, INVTYPE_SHOULDER = { 3 }, INVTYPE_CHEST = { 5 }, INVTYPE_ROBE = { 5 },
@@ -373,6 +411,8 @@ function LO:Compare(link)
     local slots = SLOTS[i.equipLoc]
     if not slots then return nil end
     if not canWear(i.classID, i.subID) then return nil end
+    -- an item only some classes may wear (a rogues' mask, say)
+    if not classAllowed(link) then return nil end
     local newStats = LO.Stats(link)
     if not newStats then return nil end
     local w, caps = LO.Weights(), LO.Caps()
@@ -497,10 +537,11 @@ local function ourTip()
     return tip
 end
 
+-- the comparison (fqpLoot) and what disenchanting gives (fqpDE, Disenchant.lua), each when there is one
 local function place(tt)
-    local line = tt.fqpLoot
+    local line, de = tt.fqpLoot, tt.fqpDE
     local t = ourTip()
-    if not line or not tt:IsShown() then
+    if not (line or de) or not tt:IsShown() then
         if t.owner == tt then t:Hide() end
         return
     end
@@ -508,10 +549,16 @@ local function place(tt)
     t:SetOwner(tt, "ANCHOR_NONE")
     t:ClearLines()
     t:SetScale(tt:GetScale() or 1)
-    t:AddDoubleLine("|T" .. ns.Tex("icon") .. ":12:12:0:0|t " .. ns.title, " ", 0.55, 0.55, 0.55, 1, 1, 1)
+    t:AddDoubleLine("|T" .. ns.Tex("icon") .. ":12:12:0:0|t " .. ns.title, " ", 0.8, 0.8, 0.8, 1, 1, 1)
     t:AddLine(" ")
-    t:AddLine(line.text, line.r, line.g, line.b, true)
-    for _, d in ipairs(line.diffs or {}) do t:AddLine("   " .. d[1], d[2], d[3], d[4]) end
+    if line then
+        t:AddLine(line.text, line.r, line.g, line.b, true)
+        for _, d in ipairs(line.diffs or {}) do t:AddLine("   " .. d[1], d[2], d[3], d[4]) end
+    end
+    if de then
+        if line then t:AddLine(" ") end
+        for _, d in ipairs(de) do t:AddLine(d[1], d[2], d[3], d[4]) end
+    end
     -- fonts per line: the first would get the big heading font (here the normal one, grey, like a source note),
     -- the second is a small gap below it, the rest the normal tooltip font
     for n = 1, (t:NumLines() or 0) do
@@ -520,9 +567,17 @@ local function place(tt)
     end
     if t.SetMinimumWidth then t:SetMinimumWidth(0) end
     t:Show()
-    -- exactly as wide as the item tooltip (the minimum width would only count the text, without the border)
+    -- a nearly solid dark ground: what lies behind must not shine through the text
+    if type(t.NineSlice) == "table" and t.NineSlice.SetCenterColor then
+        t.NineSlice:SetCenterColor(0.03, 0.03, 0.04, 0.94)
+    elseif t.SetBackdropColor then
+        t:SetBackdropColor(0.03, 0.03, 0.04, 0.94)
+    end
+    -- as wide as the item tooltip, but never narrower than its own text (a short item name above a long line of what
+    -- disenchanting gives)
+    local own = t:GetWidth() or 0
     local w = tt:GetWidth()
-    if w and w > 0 then t:SetWidth(w) end
+    if w and w > 0 then t:SetWidth(math.max(w, own)) end
     t:ClearAllPoints()
     local bottom = tt:GetBottom() or 0
     if bottom * (tt:GetEffectiveScale() or 1) < (t:GetHeight() or 40) * (t:GetEffectiveScale() or 1) + 8 then
@@ -1070,7 +1125,7 @@ ns.OnLogin(function()
         if tt then
             -- placed when the item tooltip shows (its size is known then), gone with it
             hooksecurefunc(tt, "Show", function(t) ns.Debug.Call("LootOpt", place, t) end)
-            tt:HookScript("OnTooltipCleared", function(t) t.fqpLoot = nil; place(t) end)
+            tt:HookScript("OnTooltipCleared", function(t) t.fqpLoot = nil; t.fqpDE = nil; place(t) end)
             tt:HookScript("OnHide", function(t) if tip and tip.owner == t then tip:Hide() end end)
         end
     end

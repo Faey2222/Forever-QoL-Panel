@@ -146,7 +146,7 @@ end
 
 function M:ShowItems()
     for _, it in ipairs(self.items) do
-        local on = self.active and it.frame:IsShown()
+        local on = self.active and it.frame:IsShown() and (not it.opts.movable or it.opts.movable())
         it.ov:SetShown(on)
         it.ov:EnableMouse(on and true or false)
         if on then it.ov.label:SetText(it.opts.label()) end
@@ -286,6 +286,7 @@ function M:Toggle(on)
     if ns.Gameplay and ns.Gameplay.SetLootMoving and (not self.active or (g.enabled and g.lootText)) then
         ns.Gameplay:SetLootMoving(self.active)
     end
+    if ns.Radar and ns.Radar.SetMoving and (not self.active or ns.db.radar.enabled) then ns.Radar:SetMoving(self.active) end
     self:ShowItems()
     self:DrawGrid()
     if not self.active and self.reopenOptions then

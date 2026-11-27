@@ -26,6 +26,16 @@ MOCK_CreateAnimationGroup = function() return obj("AnimGroup") end
 MOCK_CreateAnimation = function() return obj("Anim") end
 MOCK_GetStringWidth = function() return 40 end
 MOCK_GetLeft = function() return 0 end
+-- anchors kept, so a test can tell what hangs where
+MOCK_SetPoint = function(self, point, rel, relPoint, x, y)
+    self._points = self._points or {}
+    self._points[#self._points + 1] = { point, rel, relPoint, x, y }
+end
+MOCK_ClearAllPoints = function(self) self._points = {} end
+MOCK_GetPoint = function(self, i)
+    local p = self._points and self._points[i or 1]
+    if p then return p[1], p[2], p[3], p[4], p[5] end
+end
 MOCK_SetupMenu = function(self, gen) self.gen = gen end
 MOCK_GetCenter = function() return 500, 400 end
 MOCK_GetRect = function(self) return 400, 380, self.w, self.h end
@@ -47,7 +57,13 @@ MOCK_SetShown = function(self, v) self._shown = v and true or false end
 MOCK_GetEffectiveScale = function() return 1 end
 MOCK_GetChildren = function() end
 MOCK_GetParent = function(self) return self.parent or UIParent end
-MOCK_SetScript = function(self, name, fn) self.scripts[name] = fn end
+MOCK_SetScript = function(self, name, fn)
+    -- like the game: textures and font strings have no scripts
+    if self.kind == "Texture" or self.kind == "FontString" then error(self.kind .. ":SetScript(): script type not supported by this object") end
+    self.scripts[name] = fn
+end
+MOCK_SetAttribute = function(self, k, v) self.attrs = self.attrs or {}; self.attrs[k] = v end
+MOCK_GetAttribute = function(self, k) return self.attrs and self.attrs[k] end
 MOCK_RegisterEvent = function(self, ev) handlers[ev] = self end
 
 UIParent = obj("Frame")
@@ -104,7 +120,7 @@ function GetQuestLogRewardXP() return 1850 end
 function GetQuestLogSelection() return 0 end
 function SelectQuestLogEntry() end
 function tContains(t, v) for _, x in ipairs(t) do if x == v then return true end end return false end
-function strsplit(sep, s, n) local a, b = s:match("^(%S*)%s*(.*)$"); return a, b ~= "" and b or nil end
+function strsplit(sep, s, n) local out, start = {}, 1; while true do local i, j = s:find(sep, start, true); if not i or (n and #out == n - 1) then out[#out + 1] = s:sub(start); break end; out[#out + 1] = s:sub(start, i - 1); start = j + 1 end; return unpack(out) end
 function strtrim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
 function geterrorhandler() return function(e) error(e, 0) end end
 date = os.date

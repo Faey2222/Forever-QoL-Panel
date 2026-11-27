@@ -15,6 +15,7 @@ XPBar.lua
 MinimapShape.lua
 XPRing.lua
 Reputation.lua
+PetXP.lua
 Elements.lua
 Minimap.lua
 ActionBar.lua
@@ -23,11 +24,16 @@ Nameplates.lua
 Gameplay.lua
 Mail.lua
 Warnings.lua
+Comm.lua
+Radar.lua
+Together.lua
+GroupXP.lua
 Tooltip.lua
 BeastData.lua
 Beasts.lua
 WeightData.lua
 LootOpt.lua
+Disenchant.lua
 Mover.lua
 CastBar.lua
 Dock.lua

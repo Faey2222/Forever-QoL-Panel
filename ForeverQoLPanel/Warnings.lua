@@ -548,8 +548,10 @@ W.SOUNDS = {   -- choice -> SOUNDKIT name (or false), id when the name is missin
     boss = { "RAID_BOSS_EMOTE_WARNING", 12197 }, whisper = { "TELL_MESSAGE", 3081 }, ping = { "MAP_PING", 3175 },
     questFail = { "IG_QUEST_FAILED", 847 }, invite = { "IG_PLAYER_INVITE", 880 }, levelUp = { false, 888 },
     bgReady = { "PVP_THROUGH_QUEUE", 8459 }, auction = { "AUCTION_WINDOW_OPEN", 5274 }, coins = { "LOOT_WINDOW_COIN_SOUND", 120 },
+    -- not from the game, so they stand out (media/sounds, CC0)
+    fsEnemy = { file = "enemy" }, fsAlarm = { file = "stealth" }, fsTarget = { file = "targetme" },
 }
-W.SOUND_ORDER = { "raid", "boss", "ready", "bgReady", "alarm", "alarmB", "alarmC", "whisper", "invite", "ping",
+W.SOUND_ORDER = { "fsEnemy", "fsAlarm", "fsTarget", "raid", "boss", "ready", "bgReady", "alarm", "alarmB", "alarmC", "whisper", "invite", "ping",
     "questFail", "levelUp", "auction", "coins" }
 W.SOUND_CATS = { "Class", "Expiring", "Food", "Flask", "Weapon", "Ammo" }   -- db key: "sound" .. cat
 
@@ -563,10 +565,16 @@ end
 
 function W.PlaySound(choice)
     local s = W.SOUNDS[choice or ""]
-    if not s or not PlaySound then return end
+    if not s then return end
+    if s.file then
+        if PlaySoundFile then pcall(PlaySoundFile, ns.MEDIA .. "sounds\\" .. s.file .. ".ogg", "Master") end
+        return
+    end
+    if not PlaySound then return end
     local id = (s[1] and SOUNDKIT and SOUNDKIT[s[1]]) or s[2]
     pcall(PlaySound, id, "Master")
 end
+
 
 function W:Show(list)
     local fr = frames()

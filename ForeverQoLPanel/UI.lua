@@ -45,6 +45,16 @@ UI.NEED = {
     xpring = { function() return ns.db.panel.xpPlace == "minimap" end, "PLACE_MINIMAP" },
     mmsquare = { function() return ns.db.minimap.shape == "square" end, "NEED_MM_SQUARE" },
     repring = { function() return ns.db.panel.repPlace == "minimap" end, "PLACE_MINIMAP" },
+    petbar = { function() return ns.db.panel.petBar end, "SEC_PET" },
+    petside = { function() return ns.db.panel.petPlace == "side" end, "PET_SIDE" },
+    petattach = { function() return ns.db.panel.petPlace == "attach" end, "PET_ATTACH" },
+    petfree = { function() return ns.db.panel.petPlace == "free" end, "PLACE_FREE" },
+    petportrait = { function() return ns.db.panel.petPlace == "portrait" end, "PET_PORTRAIT" },
+    disenchant = { function() return ns.db.tooltip.disenchant end, "OPT_TT_DE" },
+    radar = { function() return ns.db.radar.enabled end, "SEC_RADAR" },
+    together = { function() return ns.db.together.enabled end, "SEC_TOGETHER" },
+    togturnin = { function() return ns.db.together.turnInWatch end, "OPT_TOG_TURNIN" },
+    radartm = { function() return ns.db.radar.targetMe end, "OPT_RADAR_TARGETME" },
     xpnotring = { function() return ns.db.panel.xpPlace ~= "minimap" end, "NEED_XP_NOT_RING" },
     reptext = { function() return ns.db.panel.repText end, "OPT_XPTEXT" },
     hunter = { function() return select(2, UnitClass("player")) == "HUNTER" end, "NEED_HUNTER" },
@@ -94,6 +104,20 @@ function UI.Icon(parent, size)
         holder.icon:SetAllPoints()
     end
     return holder
+end
+
+-- The game's mark for something new since Forever (a glowing turquoise diamond), as text markup to stand behind a
+-- name; without that art a green "New".
+local NEW_ATLAS = { "plunderstorm-new-dot-lg", "plunderstorm-new-dot-sm" }
+function UI.NewMark(size)
+    local name = ns.ResolveAtlas("newMark", NEW_ATLAS)
+    if name then return ("|A:%s:%d:%d|a"):format(name, size, size) end
+    return "|cff20ff20" .. (L.WZ_NEW or "New") .. "|r"
+end
+-- the same as a texture (the navigation)
+function UI.SetNewMark(tex)
+    if ns.SetAtlas(tex, "newMark", NEW_ATLAS) then tex:Show() return true end
+    tex:Hide()
 end
 
 local function listTextures(b)
@@ -319,6 +343,11 @@ function Window:SetNav(items, active, onClick)
             r.mark:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
             r.new = r:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             r.new:SetPoint("RIGHT", -8, 0)
+            -- something new on the page: the game's turquoise diamond
+            r.dot = r:CreateTexture(nil, "OVERLAY")
+            r.dot:SetSize(16, 16)
+            r.dot:SetPoint("RIGHT", -9, 0)
+            r.dot:Hide()
             self.navRows[i] = r
         end
         r:ClearAllPoints()
@@ -328,7 +357,7 @@ function Window:SetNav(items, active, onClick)
             -- group title: small gold caps, not clickable
             r:SetSize(self.navWidth - 12, 24)
             r:EnableMouse(false)
-            r.icon:Hide(); r.mark:Hide(); r.sel:Hide(); r.hl:Hide()
+            r.icon:Hide(); r.mark:Hide(); r.sel:Hide(); r.hl:Hide(); r.dot:Hide()
             r.label:SetPoint("BOTTOMLEFT", 8, 3)
             r.label:SetPoint("RIGHT", -8, 0)
             r.label:SetFontObject(GameFontNormalSmall)
@@ -353,6 +382,17 @@ function Window:SetNav(items, active, onClick)
             -- "NEW" in green, a switched-off feature says "Off" in grey
             r.new:SetText(item.new or (item.off and L.NAV_OFF) or "")
             if item.new then r.new:SetTextColor(0.12, 1, 0) else r.new:SetTextColor(0.5, 0.5, 0.5) end
+            -- the page has something new (the diamond; without the art the green "New" text)
+            r.dot:Hide()
+            if item.fresh and not item.new and not item.mark then
+                if UI.SetNewMark(r.dot) then
+                    -- a switched-off page keeps its "Off", the diamond stands before it
+                    r.dot:ClearAllPoints()
+                    if item.off then r.dot:SetPoint("RIGHT", r.new, "LEFT", -4, 0) else r.dot:SetPoint("RIGHT", -9, 0) end
+                else
+                    r.new:SetText(L.WZ_NEW or "New"); r.new:SetTextColor(0.12, 1, 0)
+                end
+            end
             if i == active then activeTop, activeBottom = y, y + 30 end
             y = y + 31
         end
@@ -452,22 +492,47 @@ function Window:SetTabs(tabs)
             b.tabs[n] = t
         end
         local active = n == tabs.active
-        t.label:SetText(item.title)
+        -- a tab holding something new: the game's turquoise diamond behind its name
+        t.label:SetText(item.title .. (item.fresh and ("  " .. UI.NewMark(14)) or ""))
         t.label:SetFontObject(active and GameFontNormalLarge or (item.off and GameFontDisable or GameFontHighlight))
         t.bg:SetColorTexture(active and 0.1 or 0.03, active and 0.08 or 0.03, active and 0.05 or 0.03, active and 0.95 or 0.85)
         t.glow:SetShown(active)
         for _, e in ipairs(t.edges) do
             if active then e:SetColorTexture(1, 0.82, 0.3, 0.9) else e:SetColorTexture(0.45, 0.4, 0.32, 0.8) end
         end
-        t:SetWidth(math.max(110, (t.label:GetStringWidth() or 60) + 36))
-        t:ClearAllPoints()
-        -- standing on the divider (at 96 from the top)
-        t:SetPoint("BOTTOMLEFT", b, "TOPLEFT", x, -96)
-        x = x + t:GetWidth() + 6
+        t.active, t.off = active, item.off
         t:SetScript("OnClick", function() if not active then click(); tabs.onClick(n) end end)
         t:Show()
     end
     for n = #items + 1, #b.tabs do b.tabs[n]:Hide() end
+    -- The tabs fit the window: roomy if there is space; else narrower margins, then a smaller font (many tabs, long
+    -- names, the "new" mark behind them).
+    local count = #items
+    local avail = (b:GetWidth() or 0) - x - 12
+    local function total(pad, least)
+        local sum = 6 * math.max(0, count - 1)
+        for n = 1, count do sum = sum + math.max(least, (b.tabs[n].label:GetStringWidth() or 60) + pad) end
+        return sum
+    end
+    local pad, least = 36, 110
+    if avail > 0 and total(pad, least) > avail then
+        pad, least = 20, 0
+        if total(pad, least) > avail then
+            for n = 1, count do
+                local t = b.tabs[n]
+                t.label:SetFontObject(t.active and GameFontNormal or (t.off and GameFontDisableSmall or GameFontHighlightSmall))
+            end
+            pad = 16
+        end
+    end
+    for n = 1, count do
+        local t = b.tabs[n]
+        t:SetWidth(math.max(least, (t.label:GetStringWidth() or 60) + pad))
+        t:ClearAllPoints()
+        -- standing on the divider (at 96 from the top)
+        t:SetPoint("BOTTOMLEFT", b, "TOPLEFT", x, -96)
+        x = x + t:GetWidth() + 6
+    end
     -- with tabs the title moves up a little to make room
     b.title:ClearAllPoints()
     b.title:SetPoint("TOPLEFT", 96, #items > 0 and -18 or -26)
@@ -504,7 +569,7 @@ local function showTip(owner, row)
     GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
     GameTooltip:SetText(s.label, 1, 1, 1)
     if s.tip then GameTooltip:AddLine(s.tip, 1, 0.82, 0, true) end
-    if s.reload then GameTooltip:AddLine(L.NEEDS_RELOAD, 0.62, 0.62, 0.62, true) end
+    if s.reload then GameTooltip:AddLine(L.NEEDS_RELOAD, 0.82, 0.82, 0.82, true) end
     -- needs a game restart (not just a reload): its own line in orange
     if s.restart then GameTooltip:AddLine(L.NEEDS_RESTART, 1, 0.55, 0.2, true) end
     if row.missing then GameTooltip:AddLine(row.missing, 1, 0.54, 0.42, true) end
@@ -1001,7 +1066,7 @@ function Window:Render(specs, onChange)
             local on = not missing
             w.spec, w.missing = s, missing
             w.label:SetFontObject(sub and GameFontHighlightSmall or GameFontHighlight)
-            w.label:SetText(s.label .. (s.reload and "  |cff808080*|r" or ""))
+            w.label:SetText(s.label .. (s.reload and "  |cff808080*|r" or "") .. (s.isNew and ("  " .. UI.NewMark(15)) or ""))
             w.label:SetTextColor(on and (sub and 0.85 or 1) or 0.45, on and (sub and 0.85 or 1) or 0.45, on and (sub and 0.85 or 1) or 0.45)
             w:SetSize(width - x - PAD, h)
             w:SetPoint("TOPLEFT", x, -y)

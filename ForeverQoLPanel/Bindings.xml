@@ -1,0 +1,4 @@
+<Bindings>
+	<Binding name="CLICK ForeverQoLPanelStealthTarget:LeftButton" header="FOREVERQOLPANEL" category="ADDONS"/>
+	<Binding name="CLICK ForeverQoLPanelAttackerTarget:LeftButton" category="ADDONS"/>
+</Bindings>

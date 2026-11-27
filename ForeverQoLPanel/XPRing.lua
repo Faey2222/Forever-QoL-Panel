@@ -58,7 +58,7 @@ end
 
 function Ring.Supported() return Ring.Shape() ~= nil end
 
-local XPRING, REPRING   -- the two instances, made at the end
+local XPRING, REPRING, PETRING   -- the instances, made at the end
 
 -- what the player wants and can have: XP place "minimap", the XP bar on, not at the highest level
 function Ring.Wanted()
@@ -73,8 +73,15 @@ function Ring.RepWanted()
     return panel.repPlace == "minimap" and ns.Rep and ns.Rep:Active() and Ring.Supported() or false
 end
 
+-- the hunter pet's ring: place "minimap" of the pet bar; it takes the XP ring's place, so not with the XP ring
+function Ring.PetWanted()
+    local panel = p()
+    return panel.petPlace == "minimap" and ns.PetXP and ns.PetXP:Active() and not Ring.Wanted() and Ring.Supported() or false
+end
+
 function Ring:IsWanted()
     if self.kind == "rep" then return Ring.RepWanted() end
+    if self.kind == "pet" then return Ring.PetWanted() end
     return Ring.Wanted()
 end
 
@@ -169,7 +176,8 @@ end
 function Ring:Create()
     if self.frame then return self.frame end
     local me = self
-    local f = CreateFrame("Frame", self.kind == "rep" and "ForeverQoLPanelRepRing" or "ForeverQoLPanelXPRing", UIParent)
+    local NAMES = { xp = "ForeverQoLPanelXPRing", rep = "ForeverQoLPanelRepRing", pet = "ForeverQoLPanelPetRing" }
+    local f = CreateFrame("Frame", NAMES[self.kind], UIParent)
     f:SetFrameStrata("BACKGROUND")
     if self.kind == "rep" then f:SetFrameLevel(20) end   -- above the XP ring (its layers use levels up to +8)
     f:EnableMouse(false)
@@ -222,6 +230,8 @@ function Ring:Create()
     self.frame = f
     if self.kind == "rep" then
         hooksecurefunc(ns.Rep, "Update", function() ns.Debug.Call("RepRing", me.Update, me) end)
+    elseif self.kind == "pet" then
+        hooksecurefunc(ns.PetXP, "Update", function() ns.Debug.Call("PetRing", me.Update, me) end)
     else
         hooksecurefunc(ns.XP, "Update", function() ns.Debug.Call("XPRing", me.Update, me) end)
     end
@@ -236,19 +246,20 @@ function Ring:Layout()
     local width = rep and (panel.repRingWidth or "thin") or (panel.ringWidth or "medium")
     local mw = plain(Minimap:GetWidth()) or 140
     local gap = rep and (panel.repRingGap or 2) or (panel.ringGap or 2)
-    -- the reputation ring: outside the XP ring (1 unit apart) when that is shown, else right at the map
-    local xpOn = rep and XPRING.frame and XPRING.frame:IsShown() and XPRING.shape
+    -- the reputation ring: outside the inner ring (XP, or the pet's in its place) when that is shown, else at the map
+    local inner = (XPRING.frame and XPRING.frame:IsShown() and XPRING) or (PETRING.frame and PETRING.frame:IsShown() and PETRING)
+    local xpOn = rep and inner and inner.shape
     self.base = nil
     if xpOn then
         -- round: from the XP ring's visible outer edge. At 0 the reputation ring's inner border lies right on the XP
         -- ring's outer one (drawn above it): one border between the two. The border is 2.3 texture units of 256 wide.
-        if XPRING.shape == "round" then
-            local vis = XPRING.outer * EDGE
-            local rimW = RIM_OUT_PX * (XPRING.outer * 2 / 256)
+        if inner.shape == "round" then
+            local vis = inner.outer * EDGE
+            local rimW = RIM_OUT_PX * (inner.outer * 2 / 256)
             self.base = gap > 0 and (vis + gap) or (vis - rimW)
         else
             -- square: at 0 the reputation frame's inner line on the XP frame's outer line
-            self.base = XPRING.h + XPRING.t / 2 + (gap > 0 and gap or -1)
+            self.base = inner.h + inner.t / 2 + (gap > 0 and gap or -1)
         end
     end
     local rim = RIM[panel.rim or "bronze"] or RIM.bronze
@@ -256,7 +267,7 @@ function Ring:Layout()
     f:ClearAllPoints()
     f:SetPoint("CENTER", Minimap, "CENTER", 0, 0)
     -- the bar's setting: every 5, 10, 20 or 25 %, 0 = none
-    local every = rep and (panel.repTicks or 10) or (panel.ticks or 10)
+    local every = rep and (panel.repTicks or 10) or (self.kind == "pet" and (panel.petTicks or 10)) or (panel.ticks or 10)
     if self.shape == "round" then
         local k = (rep and REP_WIDTHS or WIDTHS)[width] or WIDTHS.medium
         -- the band's inner edge `gap` outside the map (or at base); the textures' ring ends a pixel before their edge
@@ -328,10 +339,18 @@ end
 
 function Ring:UpdateRep()
     local f = self.frame
-    local name, reaction, value, size = ns.Rep:Data()
-    if not reaction then return end
-    local share = size > 0 and value / size or 0
-    local r, g, b = ns.Rep.Color(reaction)
+    local share, r, g, b
+    if self.kind == "pet" then
+        local name, _, cur, nxt = ns.PetXP:Data()
+        if not name then return end
+        share = cur / nxt
+        r, g, b = ns.PetXP.Color()
+    else
+        local _, reaction, value, size = ns.Rep:Data()
+        if not reaction then return end
+        share = size > 0 and value / size or 0
+        r, g, b = ns.Rep.Color(reaction)
+    end
     for _, key in ipairs(LAYERS) do
         if key ~= "fill" then
             f.arcs[key]:Hide()
@@ -344,13 +363,13 @@ function Ring:UpdateRep()
     else
         drawStrips(f, f.sq.fill, share, self.h, self.t - 2, { r * 0.8, g * 0.8, b * 0.8, 1 })
     end
-    if self.hover then ns.Rep:ShowTooltip(f) end
+    if self.hover then if self.kind == "pet" then ns.PetXP:ShowTooltip(f) else ns.Rep:ShowTooltip(f) end end
 end
 
 function Ring:Update()
     local f = self.frame
     if not (f and f:IsShown()) then return end
-    if self.kind == "rep" then return self:UpdateRep() end
+    if self.kind ~= "xp" then return self:UpdateRep() end
     local XP = ns.XP
     if XP.questsDirty then XP.questsDirty = false; XP.ScanQuests() end
     local panel = p()
@@ -390,7 +409,7 @@ end
 
 -- shimmer: the quest layer breathes slowly; ready (enough for the level, readyPulse on): it pulses faster
 function Ring:Animate()
-    if self.kind == "rep" then return end
+    if self.kind ~= "xp" then return end
     local f = self.frame
     local panel = p()
     local moving = panel.animations ~= false
@@ -444,7 +463,7 @@ function Ring:CheckHover()
     end
     if on and not self.hover then
         self.hover = true
-        if self.kind == "rep" then ns.Rep:ShowTooltip(f) else ns.XP:ShowTooltip(f) end
+        if self.kind == "rep" then ns.Rep:ShowTooltip(f) elseif self.kind == "pet" then ns.PetXP:ShowTooltip(f) else ns.XP:ShowTooltip(f) end
     elseif not on and self.hover then
         self.hover = false
         if GameTooltip:IsOwned(f) then GameTooltip:Hide() end
@@ -453,11 +472,13 @@ end
 
 XPRING = setmetatable({ kind = "xp" }, { __index = Ring })
 REPRING = setmetatable({ kind = "rep" }, { __index = Ring })
-ns.Ring, ns.RepRing = XPRING, REPRING
+PETRING = setmetatable({ kind = "pet" }, { __index = Ring })
+ns.Ring, ns.RepRing, ns.PetRing = XPRING, REPRING, PETRING
 
 -- both, the XP ring first (the reputation ring measures from it)
 function Ring.RefreshAll()
     XPRING:Refresh()
+    PETRING:Refresh()
     REPRING:Refresh()
 end
 

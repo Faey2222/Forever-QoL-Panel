@@ -19,6 +19,9 @@ local function lo() return ns.db.lootopt end
 local function btn() return ns.db.buttons end
 local function cb() return ns.db.castbar end
 local function popt() return ns.db.panel.opt end
+local function rd() return ns.db.radar end
+local RSOUNDS = { { "none", "NONE" }, { "fsEnemy", "SND_FSENEMY" }, { "fsAlarm", "SND_FSALARM" }, { "fsTarget", "SND_FSTARGET" }, { "ping", "SND_PING" }, { "raid", "SND_RAID" }, { "boss", "SND_BOSS" }, { "ready", "SND_READY" },
+    { "alarm", "SND_ALARM" }, { "whisper", "SND_WHISPER" }, { "bgReady", "SND_BGREADY" } }
 local RINGW = { { "thin", "RING_THIN" }, { "medium", "RING_MEDIUM" }, { "wide", "RING_WIDE" } }
 -- a few of the warning sounds for the news page (all of them are in the options)
 local SOUNDS = { { "none", "NONE" }, { "raid", "SND_RAID" }, { "boss", "SND_BOSS" }, { "ready", "SND_READY" },
@@ -169,6 +172,84 @@ local PAGES = {
         { "choice", "OPT_QSTYLE", panel, "questStyle", { { "veil", "QSTYLE_VEIL" }, { "frame", "QSTYLE_FRAME" }, { "line", "QSTYLE_LINE" },
             { "glow", "QSTYLE_GLOW" }, { "shimmer", "QSTYLE_SHIMMER" }, { "stripes", "QSTYLE_STRIPES" } } },
     } },
+    { id = "petbar", icon = "Interface\\Icons\\Ability_Hunter_BeastTaming", since = "1.8.0", title = "SEC_PET", text = "WZ_PET_TEXT", controls = {
+        { "check", "SEC_PET", panel, "petBar", class = "HUNTER" },
+        { "choice", "OPT_PET_PLACE", panel, "petPlace", { { "side", "PET_SIDE" }, { "attach", "PET_ATTACH" }, { "minimap", "PLACE_MINIMAP" },
+            { "free", "PLACE_FREE" }, { "portrait", "PET_PORTRAIT" } }, class = "HUNTER" },
+        { "choice", "OPT_PET_COLOR", panel, "petColor", { { "orange", "COLOR_ORANGE" }, { "yellow", "COLOR_YELLOW" }, { "green", "COLOR_GREEN" },
+            { "blue", "COLOR_BLUE" }, { "red", "COLOR_RED" } }, class = "HUNTER" },
+        { "slider", "WZ_PET_TICKS", panel, "petTicks", min = 0, max = 25, step = 5, suffix = " %", class = "HUNTER" },
+    } },
+    { id = "petbarsize", icon = "Interface\\Icons\\Ability_Hunter_BeastTraining", since = "1.8.0", title = "WZ_PETSIZE", text = "WZ_PETSIZE_TEXT", controls = {
+        { "choice", "OPT_PET_SIDE", panel, "petSide", { { "left", "SIDE_LEFT" }, { "right", "SIDE_RIGHT" } }, class = "HUNTER" },
+        { "slider", "OPT_PET_SIDEWIDTH", panel, "petSideWidth", min = 15, max = 50, step = 1, suffix = " %", class = "HUNTER" },
+        { "slider", "WZ_PET_ATTACHW", panel, "petWidth", min = 40, max = 100, step = 5, suffix = " %", class = "HUNTER" },
+        { "slider", "WZ_PET_FREEW", panel, "petFreeWidth", min = 60, max = 400, step = 10, suffix = " px", class = "HUNTER" },
+        { "slider", "WZ_PET_FREEH", panel, "petFreeHeight", min = 6, max = 20, step = 1, suffix = " px", class = "HUNTER" },
+    } },
+    { id = "petportrait", icon = "Interface\\Icons\\Ability_Hunter_BeastCall", since = "1.8.0", title = "PET_PORTRAIT", text = "WZ_PETPORT_TEXT", controls = {
+        { "slider", "OPT_PET_PORTW", panel, "petPortraitWidth", min = 0, max = 300, step = 5, suffix = " px", class = "HUNTER" },
+        { "slider", "OPT_PET_FREEH", panel, "petPortraitHeight", min = 6, max = 20, step = 1, suffix = " px", class = "HUNTER" },
+        { "slider", "OPT_PET_PORTX", panel, "petPortraitX", min = -150, max = 150, step = 1, suffix = " px", class = "HUNTER" },
+        { "slider", "OPT_PET_PORTY", panel, "petPortraitY", min = -60, max = 60, step = 1, suffix = " px", class = "HUNTER" },
+    } },
+    { id = "disenchant", icon = "Interface\\Icons\\Spell_Holy_RemoveCurse", since = "1.8.0", title = "OPT_TT_DE", text = "OPT_TT_DE_TIP", controls = {
+        { "check", "OPT_TT_DE", tt, "disenchant" },
+        { "check", "OPT_TT_DE_ONLY", tt, "deOnlyEnchanter" },
+    } },
+    { id = "radar", icon = "Interface\\Icons\\Ability_Hunter_EagleEye", since = "1.8.0", title = "SEC_RADAR", text = "WZ_RADAR_TEXT", controls = {
+        { "check", "SEC_RADAR", rd, "enabled" },
+        { "check", "WZ_RADAR_ITEM", items, "radar" },
+        { "choice", "OPT_RADAR_SOUND", rd, "sound", RSOUNDS },
+        { "choice", "OPT_RADAR_STEALTH_SOUND", rd, "stealthSound", RSOUNDS },
+        { "check", "OPT_RADAR_STEALTH_WARN", rd, "stealthWarning" },
+        { "check", "OPT_RADAR_RESTING", rd, "quietResting" },
+    } },
+    { id = "radartarget", icon = "Interface\\Icons\\Ability_Hunter_SniperShot", since = "1.8.0", title = "OPT_RADAR_TARGETME", text = "OPT_RADAR_TARGETME_TIP", controls = {
+        { "check", "OPT_RADAR_TARGETME", rd, "targetMe" },
+        { "choice", "OPT_RADAR_TARGET_SOUND", rd, "targetSound", RSOUNDS },
+        { "check", "OPT_RADAR_TARGET_WARN", rd, "targetWarning" },
+    } },
+    { id = "radarshare", icon = "Interface\\Icons\\INV_Letter_17", since = "1.8.0", title = "SEC_RADAR_SHARE", text = "WZ_RADARSHARE_TEXT", controls = {
+        { "check", "OPT_RADAR_LISTEN", rd, "shareListen" },
+        { "check", "OPT_RADAR_SEND", rd, "shareSend" },
+        { "check", "OPT_RADAR_SENDSPY", rd, "shareSpy" },
+        { "check", "OPT_VERSIONCHECK", function() return ns.db end, "versionCheck" },
+    } },
+    { id = "radarpvp", icon = "Interface\\Icons\\Ability_Stealth", since = "1.8.0", title = "OPT_RADAR_BG", text = "OPT_RADAR_BG_TIP", controls = {
+        { "choice", "OPT_RADAR_BG", rd, "bgMode", { { "off", "RADAR_BG_OFF" }, { "stealth", "RADAR_BG_STEALTH" }, { "all", "RADAR_BG_ALL" } } },
+    } },
+    { id = "radarlist", icon = "Interface\\Icons\\INV_Misc_Spyglass_01", since = "1.8.0", title = "WZ_RADARLIST", text = "WZ_RADARLIST_TEXT", controls = {
+        { "check", "OPT_RADAR_AUTOLIST", rd, "autoList" },
+        { "slider", "OPT_RADAR_ROWS", rd, "listRows", min = 3, max = 20, step = 1 },
+        { "slider", "OPT_RADAR_TIMEOUT", rd, "timeout", min = 15, max = 300, step = 15, suffix = " s" },
+        { "check", "OPT_RADAR_HIDEEMPTY", rd, "hideEmpty" },
+    } },
+    { id = "together", icon = "Interface\\Icons\\INV_Misc_Book_08", since = "1.8.0", title = "SEC_TOGETHER", text = "WZ_TOGETHER_TEXT", controls = {
+        { "check", "SEC_TOGETHER", function() return ns.db.together end, "enabled" },
+        { "check", "WZ_TOGETHER_ITEM", items, "together" },
+        { "check", "OPT_TOG_WINDOW", function() return ns.db.together end, "window" },
+        { "check", "OPT_TOG_LOCKED", function() return ns.db.together end, "locked" },
+        { "check", "OPT_TOG_XPWIN", function() return ns.db.together end, "xpWindow" },
+        { "check", "OPT_TOG_XPSEP", function() return ns.db.together end, "xpSeparate" },
+    } },
+    { id = "togethertracker", icon = "Interface\\Icons\\INV_Misc_Note_01", since = "1.8.0", title = "OPT_TOG_TRACKER", text = "OPT_TOG_TRACKER_TIP", controls = {
+        { "check", "OPT_TOG_TRACKER", function() return ns.db.together end, "minimizeTracker" },
+    } },
+    { id = "togetheraccept", icon = "Interface\\Icons\\INV_Misc_Note_02", since = "1.8.0", title = "OPT_TOG_ACCEPT", text = "OPT_TOG_ACCEPT_TIP", controls = {
+        { "check", "OPT_TOG_ACCEPT", function() return ns.db.together end, "autoAccept" },
+    } },
+    { id = "togetherdone", icon = "Interface\\Icons\\INV_Misc_Note_03", since = "1.8.0", title = "OPT_TOG_SOUNDDONE", text = "OPT_TOG_SOUNDDONE_TIP", controls = {
+        { "check", "OPT_TOG_SOUNDDONE", function() return ns.db.together end, "soundAllDone" },
+    } },
+    { id = "togetherturnin", icon = "Interface\\Icons\\INV_Misc_PocketWatch_02", since = "1.8.0", title = "OPT_TOG_TURNIN", text = "OPT_TOG_TURNIN_TIP", controls = {
+        { "check", "OPT_TOG_TURNIN", function() return ns.db.together end, "turnInWatch" },
+        { "check", "OPT_TOG_SOUNDTURNIN", function() return ns.db.together end, "soundTurnIn" },
+    } },
+    { id = "lootclass", icon = "Interface\\Icons\\INV_Misc_Bag_10_Blue", since = "1.8.0", title = "SEC_LOOTOPT", text = "WZ_LOOTCLASS_TEXT", controls = {
+        { "check", "OPT_LO_UPGRADE", lo, "upgrade" },
+    } },
+    { id = "newmarks", icon = "Interface\\Icons\\INV_Misc_Gem_Diamond_01", since = "1.8.0", title = "WZ_NEWMARKS", text = "WZ_NEWMARKS_TEXT", controls = {} },
     { id = "beastpet", icon = "Interface\\Icons\\Ability_Hunter_BeastTraining", since = "1.4.0", title = "WZ_BEASTPET", text = "WZ_BEASTPET_TEXT", controls = {
         { "check", "OPT_TT_BEASTS", tt, "beasts", class = "HUNTER" },
     } },
@@ -368,6 +449,26 @@ function Wz:Open(all)
     self.index, self.seen = 1, {}
     self:Render()
     self.frame:Show()
+end
+
+-- The settings the newest version brought (its pages' controls), for the options to mark them as new:
+-- { [table] = { [key] = true } }
+function Wz.NewSettings()
+    local latest
+    for _, p in ipairs(PAGES) do if not latest or newer(p.since, latest) then latest = p.since end end
+    local out = {}
+    for _, p in ipairs(PAGES) do
+        if p.since == latest then
+            for _, c in ipairs(p.controls or {}) do
+                local ok, t = pcall(c[3])
+                if ok and type(t) == "table" and c[4] ~= nil then
+                    out[t] = out[t] or {}
+                    out[t][c[4]] = true
+                end
+            end
+        end
+    end
+    return out
 end
 
 -- What's new (from the options): the pages of the newest version that brought any, as after an update

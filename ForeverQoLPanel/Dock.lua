@@ -25,7 +25,8 @@ local SLIDE = 0.38
 
 local FILL = { 0.03, 0.025, 0.02, 0.9 }
 -- a bar border set: the head bar's pieces and the reputation bar's (prefix r)
-local PIECES = { "capL", "capR", "thinB", "thinT", "rcapL", "rcapR", "rthinB", "rthinT" }
+local PIECES = { "capL", "capR", "thinB", "thinT", "rcapL", "rcapR", "rthinB", "rthinT", "pcapL", "pcapR", "pthinB", "pthinT" }
+local function plainNum(v) return type(v) == "number" and not ns.Secret(v) and v or nil end
 
 -- modern skin: flat, a thin border, square or round corners
 local MPH, MBAR, MSIDE = BH + 2, 10, 12        -- panel height, bar height, side room
@@ -162,9 +163,11 @@ function Dock:Init()
     self.mPanel = newBox(self, self.rim)
     -- the bars' borders in the panel, and the holders of bars set free
     self.rep = ns.Rep:Create(self)
+    self.pet = ns.PetXP:Create(self)
     self.S = self:NewSet(self.rim, self)
     self.xpHolder = self:NewHolder("ForeverQoLPanelXPHolder", "xpPos", "MOVE_XPBAR")
     self.repHolder = self:NewHolder("ForeverQoLPanelRepHolder", "repPos", "MOVE_REPBAR")
+    self.petHolder = self:NewHolder("ForeverQoLPanelPetHolder", "petPos", "MOVE_PETBAR")
 
     ns.Elements:Build(self.band)
 
@@ -196,14 +199,15 @@ function Dock:Refresh()
     self.edge:SetTexture(ns.Tex("edge" .. suffix), "REPEAT", "CLAMP")
     for _, t in ipairs({ self.capL, self.capR, self.edge }) do t:SetVertexColor(unpack(tint)) end
     -- the bars' pieces: caps are picked per layout (open or closed), the straight edges are always the same
-    for _, S in ipairs({ self.S, self.xpHolder.S, self.repHolder.S }) do
+    for _, S in ipairs({ self.S, self.xpHolder.S, self.repHolder.S, self.petHolder.S }) do
         S.suffix = suffix
-        for _, key in ipairs({ "thinB", "rthinB" }) do S[key]:SetTexture(ns.Tex("edge-bar" .. suffix), "REPEAT", "CLAMP") end
-        for _, key in ipairs({ "thinT", "rthinT" }) do S[key]:SetTexture(ns.Tex("edge-bar-top" .. suffix), "REPEAT", "CLAMP") end
+        for _, key in ipairs({ "thinB", "rthinB", "pthinB" }) do S[key]:SetTexture(ns.Tex("edge-bar" .. suffix), "REPEAT", "CLAMP") end
+        for _, key in ipairs({ "thinT", "rthinT", "pthinT" }) do S[key]:SetTexture(ns.Tex("edge-bar-top" .. suffix), "REPEAT", "CLAMP") end
         for _, key in ipairs(PIECES) do S[key]:SetVertexColor(unpack(tint)) end
     end
     ns.XP:ApplySkin(self:Modern())
     ns.Rep:ApplySkin(self:Modern())
+    ns.PetXP:ApplySkin(self:Modern())
     ns.Elements.ApplyFont()
     ns.Elements:ApplyIcons()
     ns.Elements:ResetWidths()
@@ -322,9 +326,9 @@ function Dock:NewSet(rim, fillParent)
     S.rrim:SetAllPoints()
     S.rrim:SetFrameLevel(fillParent:GetFrameLevel() + 4)
     for _, key in ipairs(PIECES) do
-        S[key] = (key:sub(1, 1) == "r" and S.rrim or rim):CreateTexture(nil, "OVERLAY", nil, 0)
+        S[key] = ((key:sub(1, 1) == "r" or key:sub(1, 1) == "p") and S.rrim or rim):CreateTexture(nil, "OVERLAY", nil, 0)
     end
-    S.mBar, S.mRep = newBox(fillParent, rim), newBox(fillParent, rim)
+    S.mBar, S.mRep, S.mPet = newBox(fillParent, rim), newBox(fillParent, rim), newBox(fillParent, rim)
     return S
 end
 
@@ -332,12 +336,36 @@ function Dock:HideSet(S)
     for _, key in ipairs(PIECES) do S[key]:Hide() end
     boxHide(S.mBar)
     boxHide(S.mRep)
+    boxHide(S.mPet)
 end
 
 -- "attach", "below", "free" or "minimap" (the ring, XPRing.lua); a ring it cannot have means "attach"
 function Dock:RepMode()
     local m = ns.db.panel.repPlace or "attach"
-    if m == "minimap" and not (ns.Ring and ns.Ring.RepWanted()) then return "attach" end
+    if m == "minimap" and not (ns.Ring and ns.Ring.RepWanted()) then m = "attach" end
+    -- the pet's bar beside or hanging from the XP bar: the reputation bar cannot hang there too
+    if m == "attach" then
+        local pm = self:PetMode()
+        if pm == "side" or pm == "attach" then return "below" end
+    end
+    return m
+end
+
+-- The hunter pet's XP bar (PetXP.lua): "side" (beside the XP bar, sharing its width), "attach" (hanging from it),
+-- "minimap" (the ring), "free" (move mode, own size), "portrait" (below the pet's frame); nil without a pet bar.
+-- What cannot be had falls back: beside / hanging without the XP bar in the panel, and the ring with the XP ring
+-- there, go free / hang; under the portrait without the pet's frame goes free.
+function Dock:PetMode()
+    local p = ns.db.panel
+    if not (ns.PetXP and ns.PetXP:Active()) then return nil end
+    local m = p.petPlace or "attach"
+    if m == "minimap" then
+        if ns.Ring and ns.Ring.PetWanted() then return "minimap" end
+        m = "attach"
+    end
+    local xpInStack = p.xpbar and not ns.XP.AtMaxLevel() and self:XPPlace() ~= "minimap"
+    if (m == "side" or m == "attach") and not xpInStack then return "free" end
+    if m == "portrait" and not _G.PetFrame then return "free" end
     return m
 end
 
@@ -387,55 +415,73 @@ function Dock:DrawStack(S, W, x0, top, open)
     local main = self:StackMain()
     local ctx = Dock.ctx
     local bw = W - 2 * x0
-    local withRep = main == "xp" and ns.Rep:Active() and self:RepMode() ~= "free" and self:RepMode() ~= "minimap"
-    local attach = self:RepMode() == "attach"
-    local rw = math.floor(bw * (p.repWidth or 85) / 100 + 0.5)
-    local rx0 = math.floor((W - rw) / 2 + 0.5)
+    local repMode = self:RepMode()
+    local withRep = main == "xp" and ns.Rep:Active() and repMode ~= "free" and repMode ~= "minimap"
+    local petMode = main == "xp" and self:PetMode() or nil
+    local petSide, petAttach = petMode == "side", petMode == "attach"
     local head = main == "xp" and ns.XP or ns.Rep
-    local bottomY
     self.bar:SetShown(main == "xp")
-    if self:Modern() then
-        hidePieces(S, ""); hidePieces(S, "r")
-        local tint = MBORDER[p.rim] or MBORDER.bronze
-        local th = p.border or 2
-        local br = p.corners == "round" and 6 or 0
-        local rr = p.corners == "round" and 3 or 0
-        -- hanging from the panel, the bar's upper corners stay square (they meet the panel's line)
-        boxSet(S.mBar, x0 - th, top - th, bw + 2 * th, MBAR + 2 * th, open and { 0, 0, br, br } or br, nil, tint, th)
-        head:SetGeometry(x0, top, bw, MBAR, ctx)
-        bottomY = top + MBAR + th
-        if withRep then
-            local ry
-            if attach then
-                -- its top border is the XP bar's bottom border
-                ry = top + MBAR + th
-                boxSet(S.mRep, rx0 - th, top + MBAR, rw + 2 * th, MRBAR + 2 * th, { 0, 0, rr, rr }, nil, tint, th)
-            else
-                ry = top + MBAR + 2 * th + 3
-                boxSet(S.mRep, rx0 - th, ry - th, rw + 2 * th, MRBAR + 2 * th, rr, nil, tint, th)
-            end
-            ns.Rep:SetGeometry(rx0, ry, rw, MRBAR, ctx)
-            ns.Rep:SetShadow(attach, bottom() and not ctx)
-            bottomY = ry + MRBAR + th
-        else
-            boxHide(S.mRep)
-        end
-    else
-        boxHide(S.mBar); boxHide(S.mRep)
-        classicBorder(S, "", W, x0 + BAR / 2, top, 1, open)
-        head:SetGeometry(x0, top, bw, BAR, ctx)
-        bottomY = top + BAR + 8
-        if withRep then
-            local k = RBAR / BAR
-            local ry = attach and top + BAR + ATTACH or top + BAR + 11
-            classicBorder(S, "r", W, rx0 + RBAR / 2, ry, k, attach)
-            ns.Rep:SetGeometry(rx0, ry, W - 2 * rx0, RBAR, ctx)
-            ns.Rep:SetShadow(attach, bottom() and not ctx)
-            bottomY = ry + RBAR + 6
-        else
-            hidePieces(S, "r")
-        end
+    -- beside: the XP bar and the pet's bar share the width, so both together are never wider than the XP bar alone
+    local hx, hw, px, pw = x0, bw, nil, nil
+    if petSide then
+        local gap = 8
+        pw = math.floor(bw * (p.petSideWidth or 25) / 100 + 0.5)
+        hw = bw - pw - gap
+        if (p.petSide or "right") == "left" then px, hx = x0, x0 + pw + gap else px = x0 + hw + gap end
     end
+    local modern = self:Modern()
+    local tint = MBORDER[p.rim] or MBORDER.bronze
+    local th = p.border or 2
+    local br = p.corners == "round" and 6 or 0
+    local rr = p.corners == "round" and 3 or 0
+    hidePieces(S, ""); hidePieces(S, "r"); hidePieces(S, "p")
+    boxHide(S.mBar); boxHide(S.mRep); boxHide(S.mPet)
+    local barBottom, bottomY
+    if modern then
+        -- hanging from the panel, the bar's upper corners stay square (they meet the panel's line)
+        boxSet(S.mBar, hx - th, top - th, hw + 2 * th, MBAR + 2 * th, open and { 0, 0, br, br } or br, nil, tint, th)
+        head:SetGeometry(hx, top, hw, MBAR, ctx)
+        if petSide then
+            boxSet(S.mPet, px - th, top - th, pw + 2 * th, MBAR + 2 * th, open and { 0, 0, br, br } or br, nil, tint, th)
+            ns.PetXP:SetGeometry(px, top, pw, MBAR, ctx)
+        end
+        barBottom, bottomY = top + MBAR, top + MBAR + th
+    else
+        -- a bar from a to b: its border is drawn as if centred in a width of a + b
+        classicBorder(S, "", 2 * hx + hw, hx + BAR / 2, top, 1, open)
+        head:SetGeometry(hx, top, hw, BAR, ctx)
+        if petSide then
+            classicBorder(S, "p", 2 * px + pw, px + BAR / 2, top, 1, open)
+            ns.PetXP:SetGeometry(px, top, pw, BAR, ctx)
+        end
+        barBottom, bottomY = top + BAR, top + BAR + 8
+    end
+    -- the smaller bars below: hanging from the bar above ("attach") or with their own border below it
+    local function below(bar, pre, box, attach, pct)
+        local rw = math.floor(bw * pct / 100 + 0.5)
+        local rx0 = math.floor((W - rw) / 2 + 0.5)
+        local ry
+        if modern then
+            if attach then
+                -- its top border is the bar above's bottom border
+                ry = barBottom + th
+                boxSet(box, rx0 - th, barBottom, rw + 2 * th, MRBAR + 2 * th, { 0, 0, rr, rr }, nil, tint, th)
+            else
+                ry = barBottom + 2 * th + 3
+                boxSet(box, rx0 - th, ry - th, rw + 2 * th, MRBAR + 2 * th, rr, nil, tint, th)
+            end
+            bar:SetGeometry(rx0, ry, rw, MRBAR, ctx)
+            barBottom, bottomY = ry + MRBAR, ry + MRBAR + th
+        else
+            ry = attach and barBottom + ATTACH or barBottom + 11
+            classicBorder(S, pre, W, rx0 + RBAR / 2, ry, RBAR / BAR, attach)
+            bar:SetGeometry(rx0, ry, W - 2 * rx0, RBAR, ctx)
+            barBottom, bottomY = ry + RBAR, ry + RBAR + 6
+        end
+        bar:SetShadow(attach, bottom() and not ctx)
+    end
+    if petAttach then below(ns.PetXP, "p", S.mPet, true, p.petWidth or 85) end
+    if withRep then below(ns.Rep, "r", S.mRep, repMode == "attach", p.repWidth or 85) end
     return bottomY
 end
 
@@ -458,6 +504,7 @@ function Dock:LayoutHolders()
         h:Hide()
         if place ~= "panel" then self.bar:Hide() end
     end
+    self:LayoutPetHolder()
     local r = self.repHolder
     if ns.Rep:Active() and self:RepMode() == "free" then
         -- placed first: the first time free it starts where the bar is now, before it moves into the holder
@@ -490,11 +537,90 @@ function Dock:LayoutHolders()
     end
 end
 
+-- the pet's bar on its own: free (placed in the move mode, width and height from the settings) or below the pet's
+-- frame (as wide as most of it)
+function Dock:LayoutPetHolder()
+    local p = ns.db.panel
+    local ph = self.petHolder
+    local pm = self:PetMode()
+    if pm ~= "free" and pm ~= "portrait" then
+        self:HideSet(ph.S)
+        ph:Hide()
+        if pm ~= "side" and pm ~= "attach" then ns.PetXP:SetGeometry() end
+        return
+    end
+    local S = ph.S
+    hidePieces(S, ""); hidePieces(S, "r"); boxHide(S.mBar); boxHide(S.mRep)
+    local modern = self:Modern()
+    local w, hgt
+    if pm == "portrait" then
+        -- as wide as the pet's frame unless set (petPortraitWidth 0 = automatic), its height and offsets from the settings
+        local auto = math.floor((plainNum(PetFrame:GetWidth()) or 128) + 0.5)
+        w = (p.petPortraitWidth or 0) > 0 and p.petPortraitWidth or auto
+        hgt = p.petPortraitHeight or (modern and MRBAR or RBAR)
+    else
+        w = p.petFreeWidth or 160
+        hgt = p.petFreeHeight or (modern and MRBAR or RBAR)
+    end
+    local Wt = w + 2 * PAD
+    Dock.ctx = ph
+    if modern then
+        hidePieces(S, "p")
+        local th = p.border or 2
+        boxSet(S.mPet, PAD - th, PAD - th, w + 2 * th, hgt + 2 * th, p.corners == "round" and 3 or 0, nil,
+            MBORDER[p.rim] or MBORDER.bronze, th)
+    else
+        boxHide(S.mPet)
+        classicBorder(S, "p", Wt, PAD + hgt / 2, PAD, hgt / BAR, false)
+    end
+    ns.PetXP:SetGeometry(PAD, PAD, w, hgt, ph)
+    Dock.ctx = nil
+    ph:SetSize(Wt, hgt + 2 * PAD)
+    if pm == "portrait" then
+        -- below the frame, starting at its left edge (the portrait's side), moved by the offsets
+        ph:ClearAllPoints()
+        ph:SetPoint("TOPLEFT", PetFrame, "BOTTOMLEFT", -PAD + (p.petPortraitX or 0), PAD - 2 + (p.petPortraitY or 0))
+    else
+        self:PlaceHolder(ph)
+    end
+    ph:Show()
+end
+
+-- A bar border like the panel's XP bar for other frames (the group's XP): a set of pieces (NewSet) prepared with
+-- the panel's border width and rim, drawn around a bar from x to x + w at y (top), h high, in frame ctx.
+function Dock:PrepareSet(S)
+    local p = ns.db.panel
+    local width = WIDTH[p.border or 2] or WIDTH[2]
+    local suffix = width.suffix .. (p.rim == "bronze" and "" or "-silver")
+    local tint = RIM_TINT[p.rim] or RIM_TINT.bronze
+    S.suffix = suffix
+    for _, key in ipairs({ "thinB", "rthinB", "pthinB" }) do S[key]:SetTexture(ns.Tex("edge-bar" .. suffix), "REPEAT", "CLAMP") end
+    for _, key in ipairs({ "thinT", "rthinT", "pthinT" }) do S[key]:SetTexture(ns.Tex("edge-bar-top" .. suffix), "REPEAT", "CLAMP") end
+    for _, key in ipairs(PIECES) do S[key]:SetVertexColor(unpack(tint)) end
+end
+
+function Dock:DrawBarBorder(S, ctx, x, y, w, h)
+    local p = ns.db.panel
+    self:PrepareSet(S)
+    Dock.ctx = ctx
+    hidePieces(S, "r"); hidePieces(S, "p"); boxHide(S.mRep); boxHide(S.mPet)
+    if self:Modern() then
+        hidePieces(S, "")
+        local th = p.border or 2
+        boxSet(S.mBar, x - th, y - th, w + 2 * th, h + 2 * th, p.corners == "round" and 3 or 0, nil,
+            MBORDER[p.rim] or MBORDER.bronze, th)
+    else
+        boxHide(S.mBar)
+        classicBorder(S, "", 2 * x + w, x + h / 2, y, h / BAR, false)
+    end
+    Dock.ctx = nil
+end
+
 function Dock:PlaceHolder(h)
     local pos = ns.db.panel[h.key]
     if not pos then
         -- first time free: where the bar is now
-        local f = h.key == "xpPos" and ns.XP.frame or ns.Rep.frame
+        local f = h.key == "xpPos" and ns.XP.frame or h.key == "petPos" and ns.PetXP.frame or ns.Rep.frame
         local x, y
         if f and f:IsShown() and f:GetParent() ~= h then x, y = f:GetCenter() end
         local ux, uy = UIParent:GetCenter()
@@ -516,7 +642,7 @@ function Dock:NewHolder(name, key, label)
     h.key = key
     h:SetFrameStrata("MEDIUM")
     -- the reputation bar's holder above the XP bar's: where they overlap, its box is the one you grab
-    h:SetFrameLevel(key == "repPos" and 40 or 20)
+    h:SetFrameLevel(key == "xpPos" and 20 or 40)
     h:SetMovable(true)
     h:SetClampedToScreen(true)
     h.rim = CreateFrame("Frame", nil, h)
@@ -528,6 +654,8 @@ function Dock:NewHolder(name, key, label)
         label = function() return ns.L[label] end,
         save = function(x, y) ns.db.panel[key] = { x, y }; self:PlaceHolder(h) end,
         reset = function() ns.db.panel[key] = nil end,
+        -- the pet's bar under its portrait follows the pet's frame: nothing to move
+        movable = function() return key ~= "petPos" or self:PetMode() == "free" end,
     })
     return h
 end

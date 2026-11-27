@@ -20,6 +20,8 @@ local layout = db("layout")
 local lootopt = db("lootopt")
 local btns = db("buttons")
 local castbar = db("castbar")
+local radar = db("radar")
+local together = db("together")
 -- a colour setting: tbl()[key] = { r, g, b }
 local function color(label, tip, tbl, key, needs)
     return { type = "color", label = label, tip = tip, needs = needs,
@@ -64,6 +66,7 @@ end
 
 -- value accessors for a spec
 local function bind(s, tbl, key, onChange)
+    s.tbl, s.key = tbl, key   -- to tell a setting the newest version brought (marked as new)
     s.get = function() return tbl()[key] end
     s.set = function(v) tbl()[key] = v; if onChange then onChange(v) end end
     return s
@@ -81,6 +84,58 @@ local function slider(label, tip, key, min, max, step, suffix, needs, tbl, inden
         needs = needs, indent = indent }, tbl or panel, key)
 end
 local function header(label) return { type = "header", label = label } end
+
+-- a page's entries without the gaps (entries only in the development copy are nil elsewhere, and ipairs would stop
+-- at the first one)
+function O.Compact(t)
+    local out = {}
+    for i = 1, table.maxn(t) do if t[i] then out[#out + 1] = t[i] end end
+    return out
+end
+
+-- Settings the newest version brought get the game's "new" mark (the news pages tell which); a page holding any
+-- is marked in the navigation too.
+local function markNew(specs, fresh)
+    local any = false
+    for _, s in ipairs(specs) do
+        local t = s.tbl and select(2, pcall(s.tbl))
+        s.isNew = type(t) == "table" and fresh[t] and fresh[t][s.key] or nil
+        if s.isNew then any = true end
+    end
+    return any
+end
+function O.FreshSettings() return ns.Wizard and ns.Wizard.NewSettings and ns.Wizard.NewSettings() or {} end
+
+-- a whole feature the newest version brought (its page's main switch is new): marked in the navigation only, not on
+-- every one of its settings
+function O.FeatureIsNew(p, fresh)
+    local m = p.master
+    if not m then return false end
+    local ok, t = pcall(m[1])
+    return ok and type(t) == "table" and fresh[t] and fresh[t][m[2]] and true or false
+end
+
+function O.PageIsNew(p, fresh)
+    if O.FeatureIsNew(p, fresh) then return true end
+    -- a page of tab pages: new if any of them is
+    if p.tabs then
+        for _, tab in ipairs(p.tabs) do if O.PageIsNew(tab, fresh) then return true end end
+        return false
+    end
+    if not p.build then return false end
+    local ok, specs = pcall(p.build)
+    return ok and type(specs) == "table" and markNew(O.Compact(specs), fresh)
+end
+
+-- the marks on one page's settings (none on a page that is new as a whole)
+function O.MarkPage(p, specs, fresh)
+    if O.FeatureIsNew(p, fresh) then
+        for _, s in ipairs(specs) do s.isNew = nil end
+        return
+    end
+    markNew(specs, fresh)
+end
+O.MarkNew = markNew
 
 local function buttons(label, tip, list, needs)
     return { type = "button", label = label, tip = tip, buttons = list, needs = needs }
@@ -131,6 +186,7 @@ local PAGES = {
             end),
             choice(L.OPT_MOTION, L.OPT_MOTION_TIP, root, "motion", { { "full", L.MOTION_FULL },
                 { "reduced", L.MOTION_REDUCED }, { "off", L.MOTION_OFF } }),
+            check(L.OPT_VERSIONCHECK, L.OPT_VERSIONCHECK_TIP, root, "versionCheck"),
             header(L.SEC_MOVE),
             buttons(L.OPT_MOVE, L.OPT_MOVE_TIP, { { L.OPT_WARN_MOVE_BTN, function() ns.Mover:Toggle(true) end } }),
             check(L.MOVE_GRID, nil, layout, "grid"),
@@ -294,6 +350,34 @@ local PAGES = {
             choice(L.OPT_XPTEXT_POS, L.OPT_XPTEXT_POS_TIP, panel, "repTextPos", { { "on", L.XPTEXT_ON }, { "below", L.XPTEXT_BELOW } },
                 T, nil, true),
             slider(L.OPT_XPTEXT_SIZE, nil, "repTextSize", 7, 14, 1, " pt", T, panel, true),
+        }
+    end },
+    -- the hunter pet's XP bar
+    { title = "SEC_PET", icon = "Interface\\Icons\\Ability_Hunter_BeastTaming",
+        master = { panel, "petBar", tip = "OPT_PETBAR_TIP", needs = { "panel", "hunter" } }, build = function()
+        local P = { "petbar" }
+        local ticks = { { 0, L.NONE } }
+        for _, n in ipairs({ 5, 10, 20, 25 }) do ticks[#ticks + 1] = { n, L.TICKS_N:format(n) } end
+        local colors = {}
+        for _, c in ipairs(ns.PetXP.COLOR_ORDER) do colors[#colors + 1] = { c, L["COLOR_" .. c:upper()] } end
+        return {
+            header(L.SEC_LAYOUT),
+            choice(L.OPT_PET_PLACE, L.OPT_PET_PLACE_TIP, panel, "petPlace", { { "side", L.PET_SIDE }, { "attach", L.PET_ATTACH },
+                { "minimap", L.PLACE_MINIMAP }, { "free", L.PLACE_FREE }, { "portrait", L.PET_PORTRAIT } }, P),
+            choice(L.OPT_PET_SIDE, nil, panel, "petSide", { { "left", L.SIDE_LEFT }, { "right", L.SIDE_RIGHT } }, { "petbar", "petside" }, nil, true),
+            slider(L.OPT_PET_SIDEWIDTH, L.OPT_PET_SIDEWIDTH_TIP, "petSideWidth", 15, 50, 1, " %", { "petbar", "petside" }, nil, true),
+            slider(L.OPT_PET_WIDTH, nil, "petWidth", 40, 100, 5, " %", { "petbar", "petattach" }, nil, true),
+            slider(L.OPT_PET_FREEW, nil, "petFreeWidth", 60, 400, 10, " px", { "petbar", "petfree" }, nil, true),
+            slider(L.OPT_PET_FREEH, nil, "petFreeHeight", 6, 20, 1, " px", { "petbar", "petfree" }, nil, true),
+            buttons(L.OPT_POS_RESET, nil, { { L.OPT_WARN_MOVE_BTN, function() ns.Mover:Toggle(true) end },
+                { L.OPT_WARN_RESET_BTN, function() ns.db.panel.petPos = nil; ns.Refresh() end } }, { "petbar", "petfree" }),
+            slider(L.OPT_PET_PORTW, L.OPT_PET_PORTW_TIP, "petPortraitWidth", 0, 300, 5, " px", { "petbar", "petportrait" }, nil, true),
+            slider(L.OPT_PET_FREEH, nil, "petPortraitHeight", 6, 20, 1, " px", { "petbar", "petportrait" }, nil, true),
+            slider(L.OPT_PET_PORTX, nil, "petPortraitX", -150, 150, 1, " px", { "petbar", "petportrait" }, nil, true),
+            slider(L.OPT_PET_PORTY, nil, "petPortraitY", -60, 60, 1, " px", { "petbar", "petportrait" }, nil, true),
+            header(L.SEC_LOOK),
+            choice(L.OPT_PET_COLOR, nil, panel, "petColor", colors, P),
+            choice(L.OPT_TICKS, nil, panel, "petTicks", ticks, P),
         }
     end },
     } },
@@ -490,6 +574,93 @@ local PAGES = {
             }, Wd),
         }
     end },
+    -- questing together
+    { group = "NAV_NOTICES", icon = "Interface\\Icons\\INV_Misc_Book_08", title = "SEC_TOGETHER", tabsByHeader = true,
+        master = { together, "enabled", tip = "OPT_TOG_TIP" }, build = function()
+        local Tg = { "together" }
+        local dev = ns.name == "ForeverQoLPanel_Dev"
+        return {
+            { type = "text", label = L.TOG_TEXT },
+            -- the window
+            header(L.TOG_SEC_WINDOW),
+            check(L.OPT_TOG_WINDOW, L.OPT_TOG_WINDOW_TIP, together, "window", Tg),
+            check(L.OPT_TOG_LOCKED, nil, together, "locked", Tg, { indent = true }),
+            check(L.OPT_TOG_TRACKER, L.OPT_TOG_TRACKER_TIP, together, "minimizeTracker", Tg),
+            buttons(L.OPT_POS_RESET, nil, { { L.OPT_WARN_RESET_BTN, function()
+                ns.db.together.pos, ns.db.together.xpPos, ns.db.together.width, ns.db.together.maxHeight = nil, nil, nil, nil
+                ns.Together:Changed()
+            end } }, Tg),
+            -- the group's XP (with bag slots and ammunition)
+            header(L.SEC_GROUPXP),
+            check(L.OPT_TOG_XPWIN, L.OPT_TOG_XPWIN_TIP, together, "xpWindow", Tg),
+            check(L.OPT_TOG_XPSEP, L.OPT_TOG_XPSEP_TIP, together, "xpSeparate", Tg, { indent = true }),
+            check(L.OPT_TOG_XPLOCKED, nil, together, "xpLocked", Tg, { indent = true }),
+            -- sharing quests
+            header(L.TOG_SEC_SHARE),
+            check(L.OPT_TOG_ACCEPT, L.OPT_TOG_ACCEPT_TIP, together, "autoAccept", Tg),
+            -- done and turned in
+            header(L.TOG_SEC_TURNIN),
+            check(L.OPT_TOG_SOUNDDONE, L.OPT_TOG_SOUNDDONE_TIP, together, "soundAllDone", Tg),
+            check(L.OPT_TOG_TURNIN, L.OPT_TOG_TURNIN_TIP, together, "turnInWatch", Tg),
+            check(L.OPT_TOG_SOUNDTURNIN, L.OPT_TOG_SOUNDTURNIN_TIP, together, "soundTurnIn", { "together", "togturnin" }, { indent = true }),
+            -- the test with a made-up partner: only in the development copy
+            dev and header(L.SEC_RADAR_TEST) or nil,
+            dev and buttons(L.OPT_RADAR_TEST, L.OPT_TOG_TEST_TIP, {
+                { ns.Together.testing and L.TOG_TEST_STOP or L.TOG_TEST_START, function() ns.Together:Test(); O:Render(true) end },
+                { L.TOG_TEST_ADD, function() ns.Together:TestAdd() end },
+                { L.TOG_TEST_UPDATE, function() ns.Together:TestUpdate() end },
+                { L.TOG_TEST_FINISH, function() ns.Together:TestFinish() end } }, Tg) or nil,
+            dev and buttons(L.OPT_TOG_TEST_TURNIN, L.OPT_TOG_TEST_TURNIN_TIP, {
+                { L.TOG_TEST_PARTNER_TURNIN, function() ns.Together:TestPartnerTurnIn() end },
+                { L.TOG_TEST_MY_TURNIN, function() ns.Together:TestMyTurnIn() end },
+                { L.TOG_TEST_FAR, function() ns.Together:TestFar() end } }, Tg) or nil,
+        }
+    end },
+    -- enemy radar
+    { group = "NAV_NOTICES", icon = "Interface\\Icons\\Ability_Hunter_EagleEye", title = "SEC_RADAR", tabsByHeader = true,
+        master = { radar, "enabled", tip = "OPT_RADAR_TIP" }, build = function()
+        local Rd = { "radar" }
+        local sounds = { { "none", L.NONE } }
+        for _, k in ipairs(ns.Warnings.SOUND_ORDER) do sounds[#sounds + 1] = { k, L["SND_" .. k:upper()] } end
+        return {
+            { type = "text", label = L.RADAR_TEXT },
+            header(L.SEC_RADAR_TEST),
+            buttons(L.OPT_RADAR_TEST, L.OPT_RADAR_TEST_TIP, {
+                { L.TEST_SEEN, function() ns.Radar:Test("seen") end },
+                { L.TEST_STEALTH, function() ns.Radar:Test("stealth") end },
+                { L.TEST_TARGET, function() ns.Radar:Test("target") end },
+                { L.TEST_MIXED, function() ns.Radar:Test("mixed") end } }, Rd),
+            header(L.SEC_RADAR_DETECT),
+            slider(L.OPT_RADAR_TIMEOUT, L.OPT_RADAR_TIMEOUT_TIP, "timeout", 15, 300, 15, " s", Rd, radar),
+            check(L.OPT_RADAR_RESTING, nil, radar, "quietResting", Rd),
+            choice(L.OPT_RADAR_BG, L.OPT_RADAR_BG_TIP, radar, "bgMode", { { "off", L.RADAR_BG_OFF },
+                { "stealth", L.RADAR_BG_STEALTH }, { "all", L.RADAR_BG_ALL } }, Rd),
+            header(L.SEC_RADAR_ALERTS),
+            choice(L.OPT_RADAR_SOUND, nil, radar, "sound", sounds, Rd, function() ns.Warnings.PlaySound(ns.db.radar.sound) end),
+            choice(L.OPT_RADAR_STEALTH_SOUND, nil, radar, "stealthSound", sounds, Rd, function() ns.Warnings.PlaySound(ns.db.radar.stealthSound) end),
+            check(L.OPT_RADAR_STEALTH_WARN, L.OPT_RADAR_STEALTH_WARN_TIP, radar, "stealthWarning", Rd),
+            check(L.OPT_RADAR_TARGETME, L.OPT_RADAR_TARGETME_TIP, radar, "targetMe", Rd),
+            choice(L.OPT_RADAR_TARGET_SOUND, nil, radar, "targetSound", sounds, { "radar", "radartm" },
+                function() ns.Warnings.PlaySound(ns.db.radar.targetSound) end, true),
+            check(L.OPT_RADAR_TARGET_WARN, nil, radar, "targetWarning", { "radar", "radartm" }, { indent = true }),
+            buttons(L.OPT_RADAR_KEY:format(ns.Radar.BindingText("stealth")), L.OPT_RADAR_KEY_TIP, {
+                { L.KEY_SET, function() ns.Radar:CaptureBinding("stealth", function() O:Render(true) end) end },
+                { L.KEY_CLEAR, function() ns.Radar:ClearBinding("stealth"); O:Render(true) end } }, Rd),
+            buttons(L.OPT_RADAR_KEY_TM:format(ns.Radar.BindingText("target")), L.OPT_RADAR_KEY_TIP, {
+                { L.KEY_SET, function() ns.Radar:CaptureBinding("target", function() O:Render(true) end) end },
+                { L.KEY_CLEAR, function() ns.Radar:ClearBinding("target"); O:Render(true) end } }, { "radar", "radartm" }),
+            buttons(L.OPT_WARN_MOVE, nil, { { L.OPT_WARN_MOVE_BTN, function() ns.Radar:StealthFrame(); ns.Mover:Toggle(true) end },
+                { L.OPT_WARN_RESET_BTN, function() ns.db.radar.stealthPos, ns.db.radar.targetPos = nil, nil; ns.Radar:PlaceStealth() end } }, Rd),
+            header(L.SEC_RADAR_SHARE),
+            check(L.OPT_RADAR_LISTEN, L.OPT_RADAR_LISTEN_TIP, radar, "shareListen", Rd),
+            check(L.OPT_RADAR_SEND, L.OPT_RADAR_SEND_TIP, radar, "shareSend", Rd),
+            check(L.OPT_RADAR_SENDSPY, L.OPT_RADAR_SENDSPY_TIP, radar, "shareSpy", Rd, { indent = true }),
+            header(L.SEC_RADAR_LIST),
+            check(L.OPT_RADAR_AUTOLIST, L.OPT_RADAR_AUTOLIST_TIP, radar, "autoList", Rd),
+            slider(L.OPT_RADAR_ROWS, nil, "listRows", 3, 20, 1, "", Rd, radar),
+            check(L.OPT_RADAR_HIDEEMPTY, nil, radar, "hideEmpty", Rd),
+        }
+    end },
     { group = "NAV_NOTICES", icon = "Interface\\Icons\\INV_Misc_Coin_02", title = "SEC_LOOTTEXT",
         master = { gameplay, "lootText", tip = "OPT_GP_LOOTTEXT", needs = { "gameplay" } }, build = function()
         local T = { "gameplay", "lootText" }
@@ -526,6 +697,8 @@ local PAGES = {
             check(L.OPT_TT_COUNTS, L.OPT_TT_COUNTS_TIP, tooltip, "counts", Td),
             check(L.OPT_TT_GATHER, L.OPT_TT_GATHER_TIP, tooltip, "gather", Td),
             check(L.OPT_TT_BEASTS, L.OPT_TT_BEASTS_TIP, tooltip, "beasts", { "tooltip", "hunter" }),
+            check(L.OPT_TT_DE, L.OPT_TT_DE_TIP, tooltip, "disenchant", Td),
+            check(L.OPT_TT_DE_ONLY, nil, tooltip, "deOnlyEnchanter", { "tooltip", "disenchant" }, { indent = true }),
         }
     end },
 
@@ -558,12 +731,14 @@ function O:Render(keepScroll)
     local page = PAGES[self.index]
     -- list with group titles; navIndex -> page index
     local nav, map, group = {}, {}, nil
+    local fresh = O.FreshSettings()
+    self.fresh = fresh
     for i, p in ipairs(PAGES) do
         if p.group ~= group then
             group = p.group
             nav[#nav + 1] = { header = L[p.group] }
         end
-        nav[#nav + 1] = { icon = p.icon, title = L[p.title], off = isOff(p) }
+        nav[#nav + 1] = { icon = p.icon, title = L[p.title], off = isOff(p), fresh = O.PageIsNew(p, fresh) }
         map[#nav] = i
         if i == self.index then self.navActive = #nav end
     end
@@ -581,7 +756,8 @@ function O:Render(keepScroll)
         self.tabOf = self.tabOf or {}
         local t = math.min(self.tabOf[self.index] or 1, #page.tabs)
         local labels = {}
-        for n, tab in ipairs(page.tabs) do labels[n] = { title = L[tab.title], off = isOff(tab) } end
+        local fresh = self.fresh or O.FreshSettings()
+        for n, tab in ipairs(page.tabs) do labels[n] = { title = L[tab.title], off = isOff(tab), fresh = O.PageIsNew(tab, fresh) } end
         tabs = { items = labels, active = t, onClick = function(n)
             O.tabOf[O.index] = n
             O:Render()
@@ -603,7 +779,8 @@ function O:Render(keepScroll)
     end
     f:SetHead(page.icon, L[page.title], L[page.group], nil, toggle, tabs)
     local scroll = keepScroll and f.scroll.GetVerticalScroll and f.scroll:GetVerticalScroll()
-    local specs = page.build()
+    local specs = O.Compact(page.build())
+    O.MarkPage(page, specs, self.fresh or O.FreshSettings())
     -- a long page split into tabs at its section headers (text before the first header shows on every tab)
     if page.tabsByHeader then
         local lead, parts = {}, {}
@@ -616,7 +793,12 @@ function O:Render(keepScroll)
             self.tabOf = self.tabOf or {}
             local t = math.min(self.tabOf[self.index] or 1, #parts)
             local labels = {}
-            for n, part in ipairs(parts) do labels[n] = { title = part.title } end
+            for n, part in ipairs(parts) do
+                -- a tab holding a new setting carries the mark too (on a page new as a whole none is marked)
+                local fresh = false
+                for _, s in ipairs(part.items) do if s.isNew then fresh = true end end
+                labels[n] = { title = part.title, fresh = fresh }
+            end
             f:SetTabs({ items = labels, active = t, onClick = function(n)
                 O.tabOf[O.index] = n
                 O:Render()
@@ -668,7 +850,9 @@ function O:RenderSearch(keepScroll)
             O.Track({ s })
             found[#found + 1] = s
         end
-        for _, s in ipairs(p.build()) do
+        local specs = O.Compact(p.build())
+        O.MarkPage(p, specs, self.fresh or O.FreshSettings())
+        for _, s in ipairs(specs) do
             if s.type ~= "header" and s.type ~= "text" and (whole or matches(s.label, words) or matches(s.tip, words)) then
                 found[#found + 1] = s
             end

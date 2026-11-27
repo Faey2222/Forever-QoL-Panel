@@ -82,7 +82,7 @@ def("hearth", {
         else
             tt:AddDoubleLine(L.COOLDOWN, L.READY, 1, 0.82, 0, 0.12, 1, 0)
         end
-        if count > 0 then hint(tt, L.CLICK_HEARTH) else tt:AddLine(L.NO_HEARTH, 0.62, 0.62, 0.62) end
+        if count > 0 then hint(tt, L.CLICK_HEARTH) else tt:AddLine(L.NO_HEARTH, 0.82, 0.82, 0.82) end
     end,
 })
 
@@ -117,7 +117,7 @@ def("gold", {
     tip = function(tt)
         header(tt, L.GOLD_REALM)
         realm, faction = ns.Realm(), UnitFactionGroup("player")
-        tt:AddLine(fmt("%s, %s", ns.ShortRealm(realm) or "?", faction or "?"), 0.62, 0.62, 0.62)
+        tt:AddLine(fmt("%s, %s", ns.ShortRealm(realm) or "?", faction or "?"), 0.82, 0.82, 0.82)
         local chars, total = {}, 0
         for name, e in pairs(ns.db.gold[realm] and ns.db.gold[realm][faction] or {}) do
             chars[#chars + 1] = { name, e }
@@ -214,7 +214,7 @@ end
 local function slotTip(tt, group, title, empty)
     header(tt, title)
     local _, total, list = slots(group)
-    if total == 0 and empty then tt:AddLine(empty, 0.62, 0.62, 0.62) end
+    if total == 0 and empty then tt:AddLine(empty, 0.82, 0.82, 0.82) end
     for _, b in ipairs(list) do tt:AddDoubleLine(b[1], fmt(L.FREE_OF, b[2], b[3]), 1, 1, 1, 1, 1, 1) end
 end
 
@@ -390,7 +390,7 @@ def("mail", {
                 tt:AddLine(L.MAIL_NEW, 1, 0.82, 0)
             end
         else
-            tt:AddLine(L.MAIL_NONE, 0.62, 0.62, 0.62)
+            tt:AddLine(L.MAIL_NONE, 0.82, 0.82, 0.82)
         end
     end,
 })
@@ -424,7 +424,7 @@ def("durability", {
         header(tt, L.ITEM_durability)
         local _, items = durability()
         table.sort(items, function(a, b) return a[2] < b[2] end)
-        if #items == 0 then tt:AddLine(L.PERFECT_SHAPE, 0.62, 0.62, 0.62) end
+        if #items == 0 then tt:AddLine(L.PERFECT_SHAPE, 0.82, 0.82, 0.82) end
         for _, e in ipairs(items) do tt:AddDoubleLine(e[1] or "?", fmt("%d %%", floor(e[2] * 100 + 0.5)), 1, 1, 1, 1, 1, 1) end
         hint(tt, L.CLICK_CHARACTER)
     end,
@@ -516,7 +516,7 @@ def("pvp", {
             tt:AddLine(L.PVP_FFA_LONG, 1, 0.19, 0.19)
         else
             tt:AddLine(L.PVP_FLAGGED, 1, 0.19, 0.19)
-            if state == "timer" then line(tt, L.PVP_ENDS_IN, mmss(left)) else tt:AddLine(L.PVP_PERMANENT, 0.62, 0.62, 0.62, true) end
+            if state == "timer" then line(tt, L.PVP_ENDS_IN, mmss(left)) else tt:AddLine(L.PVP_PERMANENT, 0.82, 0.82, 0.82, true) end
         end
         hint(tt, L.CLICK_PVP)
     end,
@@ -646,7 +646,7 @@ def("tracking", {
     tip = function(tt)
         header(tt, L.ITEM_tracking)
         local on = activeTracking()
-        if #on == 0 then tt:AddLine(L.TRACK_NONE, 0.62, 0.62, 0.62) end
+        if #on == 0 then tt:AddLine(L.TRACK_NONE, 0.82, 0.82, 0.82) end
         for _, t in ipairs(on) do tt:AddLine(t.name, 1, 1, 1) end
         hint(tt, L.CLICK_TRACKING)
     end,
@@ -671,6 +671,95 @@ def("tracking", {
         end
         local b = blizzardTracking()
         if b and b.Click then b:Click() end
+    end,
+})
+
+-- Enemy radar (Radar.lua) ----------------------------------------------------------------
+
+def("radar", {
+    icon = "Interface\\Icons\\Ability_Hunter_EagleEye",
+    minWidth = function() return ns.db.radar.hideEmpty and 0 or 40 end,
+    text = function()
+        local n = ns.Radar:Count()
+        if n == 0 then return ns.db.radar.hideEmpty and "" or ("|cffa0a0a0" .. L.RADAR_NONE .. "|r") end
+        return "|cffff4040" .. L.RADAR_N:format(n) .. "|r"
+    end,
+    pulse = function() return ns.Radar:Count() > 0 end,
+    tip = function(tt)
+        header(tt, L.ITEM_radar)
+        local list = ns.Radar:Sorted()
+        if #list == 0 then tt:AddLine(L.RADAR_NONE, 0.82, 0.82, 0.82) end
+        for i, e in ipairs(list) do
+            if i > 15 then break end
+            local col = e.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[e.class]
+            local lvl = ns.Radar.LevelText(e)
+            tt:AddDoubleLine((e.stealth and "|TInterface\\Icons\\Ability_Stealth:12:12|t " or "") .. e.name
+                .. (e.reported and ("  |cff9d9d9d" .. L.RADAR_REPORTED:format(e.reported) .. "|r") or ""), lvl,
+                col and col.r or 1, col and col.g or 1, col and col.b or 1, 1, 0.82, 0)
+        end
+        if not ns.db.radar.enabled then tt:AddLine(L.RADAR_OFF, 1, 0.3, 0.3) end
+        hint(tt, L.CLICK_RADAR)
+    end,
+    click = function() ns.Radar:Toggle() end,
+})
+
+-- Questing together (Together.lua) -------------------------------------------------------
+
+def("together", {
+    icon = "Interface\\Icons\\INV_Misc_Book_08",
+    minWidth = 40,
+    text = function()
+        local T = ns.Together
+        if not T.InGroup() then return "|cffa0a0a0" .. L.TOG_NOGROUP .. "|r" end
+        local share, missing = 0, T:Missing()
+        for _, m in ipairs(missing) do if m.pushable then share = share + 1 end end
+        if share > 0 then return "|cffffa040" .. L.TOG_SHARE_N:format(share) .. "|r" end
+        -- missing, but the game lets none of them be shared
+        if #missing > 0 then return "|cffa0a0a0" .. L.TOG_MISSING_N:format(#missing) .. "|r" end
+        local active = 0
+        for id in pairs((ns.db.together.state or {}).active or {}) do active = active + 1 end
+        return active > 0 and L.TOG_ACTIVE_N:format(active) or ("|cff20ff20" .. L.TOG_SAME .. "|r")
+    end,
+    pulse = function()
+        for _, m in ipairs(ns.Together:Missing()) do if m.pushable then return true end end
+        return false
+    end,
+    tip = function(tt)
+        local T = ns.Together
+        header(tt, L.ITEM_together)
+        if not T.InGroup() then tt:AddLine(L.TOG_NOGROUP, 0.82, 0.82, 0.82) return end
+        local missing = T:Missing()
+        if #missing == 0 then tt:AddLine(L.TOG_SAME, 0.12, 1, 0) end
+        for _, m in ipairs(missing) do
+            tt:AddDoubleLine(m.title, table.concat(m.missing, ", "), m.pushable and 1 or 0.5, m.pushable and 0.82 or 0.5,
+                m.pushable and 0 or 0.5, 1, 1, 1)
+        end
+        local without = T:WithoutAddon()
+        if #without > 0 then tt:AddLine(L.TOG_WITHOUT:format(table.concat(without, ", ")), 0.82, 0.82, 0.82, true) end
+        hint(tt, L.CLICK_TOGETHER)
+    end,
+    -- the menu: share a quest someone lacks (greyed: the game does not let you share it), the window on / off
+    click = function(cell)
+        if not (MenuUtil and MenuUtil.CreateContextMenu) then return end
+        local T = ns.Together
+        MenuUtil.CreateContextMenu(cell, function(_, root)
+            root:CreateTitle(L.ITEM_together)
+            local missing = T.InGroup() and T:Missing() or {}
+            if #missing == 0 then root:CreateTitle("|cff9d9d9d" .. (T.InGroup() and L.TOG_SAME or L.TOG_NOGROUP) .. "|r") end
+            T.ShareEntries(root, missing)   -- by zone, each zone a submenu
+            -- the leader picks a quest for the group's window
+            if T.InGroup() and T.Leader() then
+                local pick = T:Pickable()
+                if #pick > 0 then
+                    T.PickEntries(root:CreateButton(L.TOG_PICK), pick)
+                end
+            end
+            root:CreateDivider()
+            root:CreateCheckbox(L.OPT_TOG_WINDOW, function() return ns.db.together.window end, function()
+                ns.db.together.window = not ns.db.together.window
+                T:Changed()
+            end)
+        end)
     end,
 })
 
@@ -729,7 +818,7 @@ def("wim", {
         else
             header(tt, "WIM")
         end
-        if W and #W.Notifications == 0 then tt:AddLine(L.WIM_NONE, 0.62, 0.62, 0.62) end
+        if W and #W.Notifications == 0 then tt:AddLine(L.WIM_NONE, 0.82, 0.82, 0.82) end
         hint(tt, L.CLICK_WIM)
         hint(tt, L.CLICK_WIM_TOOLS)
     end,
@@ -872,7 +961,7 @@ def("addons", {
     end,
     tip = function(tt)
         header(tt, L.ADDONS)
-        tt:AddLine(fmt(L.BUTTONS_COLLECTED, ns.Minimap:CollectedCount()), 0.62, 0.62, 0.62)
+        tt:AddLine(fmt(L.BUTTONS_COLLECTED, ns.Minimap:CollectedCount()), 0.82, 0.82, 0.82)
         hint(tt, L.CLICK_ADDONS)
     end,
     click = function(cell) ns.Minimap:ShowMenu(cell) end,
@@ -904,8 +993,8 @@ local function showTip(cell)
     if E.dragging or not d.tip then return end
     GameTooltip:SetOwner(cell, ns.TipPoint())
     d.tip(GameTooltip)
-    GameTooltip:AddLine(L.DRAG_HINT, 0.5, 0.5, 0.5)
-    if not d.ownRightClick then GameTooltip:AddLine(L.RIGHT_CLICK_MENU, 0.5, 0.5, 0.5) end
+    GameTooltip:AddLine(L.DRAG_HINT, 0.8, 0.8, 0.8)
+    if not d.ownRightClick then GameTooltip:AddLine(L.RIGHT_CLICK_MENU, 0.8, 0.8, 0.8) end
     GameTooltip:Show()
 end
 
@@ -1106,7 +1195,7 @@ function E:Build(parent)
     pin:SetScript("OnEnter", function(b)
         GameTooltip:SetOwner(b, ns.TipPoint())
         GameTooltip:AddLine(ns.db.panel.pinned and L.PINNED or L.PIN_PANEL, 1, 1, 1)
-        GameTooltip:AddLine(L.PIN_HINT, 0.62, 0.62, 0.62)
+        GameTooltip:AddLine(L.PIN_HINT, 0.82, 0.82, 0.82)
         GameTooltip:Show()
     end)
     pin:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1353,8 +1442,8 @@ end
 E.GROUPS = {
     { "EL_GROUP_MONEY", { "gold", "session", "bags", "materials", "ammo", "shards" } },
     { "EL_GROUP_PROGRESS", { "xph", "durability", "honor", "pvp", "favor" } },
-    { "EL_GROUP_WORLD", { "hearth", "zone", "coords", "tracking", "clock", "stopwatch" } },
-    { "EL_GROUP_SYSTEM", { "mail", "wim", "latency", "fps", "addons" } },
+    { "EL_GROUP_WORLD", { "hearth", "zone", "coords", "tracking", "radar", "clock", "stopwatch" } },
+    { "EL_GROUP_SYSTEM", { "mail", "wim", "together", "latency", "fps", "addons" } },
 }
 
 -- { { title, { keys available to this character } }, ... }

@@ -325,7 +325,7 @@ function Rep:ShowTooltip(owner)
     if size > 1 then
         GameTooltip:AddLine(fmt("%s / %s (%s %%)", num(value), num(size), decimal(value / size * 100)), 1, 1, 1)
         local nextName = _G["FACTION_STANDING_LABEL" .. (reaction + 1)]
-        if nextName then GameTooltip:AddLine(L.REP_LEFT:format(size - value, nextName), 0.62, 0.62, 0.62) end
+        if nextName then GameTooltip:AddLine(L.REP_LEFT:format(size - value, nextName), 0.82, 0.82, 0.82) end
     end
     GameTooltip:Show()
 end

@@ -89,7 +89,7 @@ local function countLines(tt, id)
         local where = {}
         if r[3] > 0 then where[#where + 1] = L.TT_BAGS:format(r[3]) end
         if r[4] > 0 then where[#where + 1] = L.TT_BANK:format(r[4]) end
-        tt:AddDoubleLine(r[1], (r[3] + r[4]) .. "  |cffa0a0a0(" .. table.concat(where, ", ") .. ")|r",
+        tt:AddDoubleLine(r[1], (r[3] + r[4]) .. "  |cffcccccc(" .. table.concat(where, ", ") .. ")|r",
             col and col.r or 1, col and col.g or 1, col and col.b or 1, 1, 1, 1)
     end
     if #rows > 1 then tt:AddDoubleLine(L.TOTAL, total, 1, 0.82, 0, 1, 1, 1) end
@@ -171,8 +171,8 @@ end
 -- My rank in a profession. The profession list by skill line ID first (independent of language and of collapsed
 -- headers in the skill window), the skill window's lines by name only where the client has no profession list.
 -- nil = unknown (shown neutral, never as "too low").
-local PROFESSION = { herb = 2372, mine = 2575, skin = 8613 }
-local SKILL_LINE = { herb = 182, mine = 186, skin = 393 }
+local PROFESSION = { herb = 2372, mine = 2575, skin = 8613, ench = 7411 }
+local SKILL_LINE = { herb = 182, mine = 186, skin = 393, ench = 333 }
 local function rank(kind)
     local wanted = ns.SpellName(PROFESSION[kind])
     if GetProfessions and GetProfessionInfo then
@@ -197,6 +197,9 @@ local function rank(kind)
     if headers > 0 then return nil, wanted end
     return 0, wanted
 end
+
+-- your skill in a profession ("herb", "mine", "skin", "ench"): skill, name
+function T.Rank(kind) return rank(kind) end
 
 local function skillColor(mine, need)
     if not mine then return 0.8, 0.8, 0.8 end

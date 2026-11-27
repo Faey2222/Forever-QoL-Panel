@@ -69,7 +69,7 @@ function M.Tooltip(owner, canDrag)
     GameTooltip:SetText(ns.title, 1, 0.82, 0)
     GameTooltip:AddLine(L.MM_CLICK, 1, 1, 1)
     GameTooltip:AddLine(L.MM_RIGHT, 1, 1, 1)
-    if canDrag then GameTooltip:AddLine(L.MM_DRAG, 0.62, 0.62, 0.62) end
+    if canDrag then GameTooltip:AddLine(L.MM_DRAG, 0.82, 0.82, 0.82) end
     GameTooltip:Show()
 end
 
@@ -142,10 +142,10 @@ function M:CreateFloating()
         local L = ns.L
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:SetText(ns.title, 1, 0.82, 0)
-        GameTooltip:AddLine(string.format(L.BUTTONS_COLLECTED, M:CollectedCount()), 0.62, 0.62, 0.62)
+        GameTooltip:AddLine(string.format(L.BUTTONS_COLLECTED, M:CollectedCount()), 0.82, 0.82, 0.82)
         GameTooltip:AddLine(L.CLICK_ADDONS, 1, 1, 1)
         GameTooltip:AddLine(L.MM_CLICK_RIGHT_OPTIONS, 1, 1, 1)
-        GameTooltip:AddLine(L.MM_DRAG, 0.62, 0.62, 0.62)
+        GameTooltip:AddLine(L.MM_DRAG, 0.82, 0.82, 0.82)
         GameTooltip:Show()
     end)
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)

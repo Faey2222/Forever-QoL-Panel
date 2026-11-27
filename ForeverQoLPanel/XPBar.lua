@@ -71,6 +71,9 @@ local function crop(tex, key, a, b)
     tex:SetTexCoord(l + (r - l) * a, l + (r - l) * b, info.topTexCoord, info.bottomTexCoord)
 end
 
+-- for other bars in the same art (the group's XP, GroupXP.lua): key "bg", "fill", "rested", part a..b
+XP.Crop = function(tex, key, a, b) return crop(tex, key, a, b) end
+
 local function animated() return ns.db.panel.animations end
 
 -- Session and level statistics -----------------------------------------------------
@@ -699,7 +702,7 @@ function XP:ShowTooltip(owner)
     local level = UnitLevel("player") or 1
     tt:AddLine(fmt(L.LEVEL_N, level), 1, 1, 1)
     if atMaxLevel() then
-        tt:AddLine(L.MAX_LEVEL, 0.62, 0.62, 0.62)
+        tt:AddLine(L.MAX_LEVEL, 0.82, 0.82, 0.82)
         tt:Show()
         return
     end
@@ -719,7 +722,7 @@ function XP:ShowTooltip(owner)
         local function pct(v) return "+" .. num(v) .. "  (" .. decimal(v / mx * 100) .. " %)" end
         tt:AddDoubleLine(fmt(L.QUESTS_DONE, n), pct(q), GOLD[1], GOLD[2], GOLD[3], GOLD[1], GOLD[2], GOLD[3])
         for _, e in ipairs(list) do
-            if e[3] then tt:AddDoubleLine("   " .. e[1], pct(e[2]), 0.62, 0.62, 0.62, 0.62, 0.62, 0.62) end
+            if e[3] then tt:AddDoubleLine("   " .. e[1], pct(e[2]), 0.82, 0.82, 0.82, 0.82, 0.82, 0.82) end
         end
         if cur + q >= mx then
             tt:AddLine(fmt(L.QUESTS_ENOUGH, level + 1, num(cur + q - mx)), 0.12, 1, 0)
@@ -727,7 +730,7 @@ function XP:ShowTooltip(owner)
             tt:AddLine(fmt(L.QUESTS_MISSING, num(mx - cur - q)), 1, 0.13, 0.13)
         end
     else
-        tt:AddLine(L.QUESTS_NONE, 0.62, 0.62, 0.62)
+        tt:AddLine(L.QUESTS_NONE, 0.82, 0.82, 0.82)
     end
     if #list > n then
         tt:AddDoubleLine(fmt(L.QUESTS_LOG, #list), "+" .. num(all), 0.45, 0.6, 1, 0.45, 0.6, 1)
