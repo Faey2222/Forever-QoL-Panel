@@ -459,6 +459,14 @@ do
     local st = ForeverQoLPanelDB.together.state
     assert(st.active[100] and st.allDone[100], "done by all: gone before turning in")
     assert(played[1] and played[1]:find("questdone", 1, true), "no sound when all are done")
+    -- my own quest got done in a group: said in the group chat (a moment later; the mock keeps the timer), once
+    assert(T.announced.mine[100], "own completed quest not announced")
+    local chatted2, realSCM2 = {}, SendChatMessage
+    SendChatMessage = function(msg, ch) chatted2[#chatted2 + 1] = { msg, ch } end
+    T:Say(ns.L.TOG_ANN_MINE_A:format(T.QuestLink(100)))
+    SendChatMessage = realSCM2
+    assert(chatted2[1] and chatted2[1][2] == "PARTY" and chatted2[1][1]:find("^%[Forever QoL Panel%]: ") and chatted2[1][1]:find("Wölfe", 1, true),
+        "own quest message: " .. tostring(chatted2[1] and chatted2[1][1]))
     -- the partner turns it in, I do not: the reminder (its timer is not run by the mock), the leader's word ends it
     ns.Comm:Received("FQP", "T|100", "PARTY", "Partner")
     ns.Comm:Received("FQP", "R|100", "PARTY", "Partner")
@@ -543,7 +551,30 @@ do
     assert(T:Missing()[1] and T:Missing()[1].id == 900003, "third test quest missing for the partner")
     assert(ForeverQoLPanelTogether.xp:IsShown(), "group XP in the test")
     T:TestUpdate()
+    -- done by both: as leader (in the test you lead) the group message - only as a preview, nothing to the chat
+    local chatted, realSCM = {}, SendChatMessage
+    SendChatMessage = function(msg, ch) chatted[#chatted + 1] = msg end
     T:TestFinish()
+    SendChatMessage = realSCM
+    assert(T.announced.group[900001] == "said" and #chatted == 0, "group message in the test: " .. tostring(chatted[1]))
+    -- the leader picks and hides a quest: said as well (in the test only as a preview), with the names and a link
+    local printed, realPrint = {}, print
+    print = function(...) printed[#printed + 1] = table.concat({ ... }, " ") end
+    SendChatMessage = function(msg) chatted[#chatted + 1] = msg end
+    T:Pick(900003)
+    T:Hide(900003)
+    SendChatMessage, print = realSCM, realPrint
+    assert(#chatted == 0, "pick / hide sent to the chat in the test")
+    local sawPick, sawHide = false, false
+    for _, line in ipairs(printed) do
+        if line:find("|Hquest:900003:", 1, true) and line:find(T.TEST_NAME, 1, true) then
+            if line:find(ns.L.TOG_ANN_PICK_A:sub(1, 6), 1, true) or line:find(ns.L.TOG_ANN_PICK_B:sub(1, 6), 1, true) then sawPick = true end
+            if line:find(ns.L.TOG_ANN_HIDE_A:sub(1, 6), 1, true) or line:find(ns.L.TOG_ANN_HIDE_B:sub(1, 6), 1, true) then sawHide = true end
+        end
+    end
+    assert(sawPick and sawHide, "pick / hide preview: " .. tostring(printed[1]))
+    local link = T.QuestLink(900001)
+    assert(link:find("|Hquest:900001:", 1, true) and link:find(T.TitleOf(900001), 1, true), "quest link: " .. link)
     local tst = ForeverQoLPanelDB.together.state
     assert(tst.active[900001] and tst.allDone[900001], "test quest done by both, but not marked")
     -- the partner turns it in (the reminder), then I do: gone for good
@@ -588,21 +619,29 @@ do
     local tog
     for _, p in ipairs(ns.Options.PAGES) do if p.title == "SEC_TOGETHER" then tog = p end end
     assert(tog and ns.Options.PageIsNew(tog, fresh), "the together page is not marked new")
-    -- a feature new as a whole: marked in the navigation only, not on its settings
+    -- the released copy shows no "Try it" tab of questing together (that test is for the development copy only)
+    assert(ns.name == "ForeverQoLPanel", "smoke test runs as " .. tostring(ns.name))
+    for _, sp in ipairs(ns.Options.Compact(tog.build())) do
+        assert(not (sp.type == "header" and sp.label == ns.L.SEC_RADAR_TEST), "'Try it' tab for users")
+        assert(sp.type ~= "button" or sp.label == ns.L.OPT_POS_RESET, "test buttons for users: " .. tostring(sp.label))
+    end
+    -- the newest version's settings on an older page (questing together's chat messages): marked there, the
+    -- older ones not
+    assert(not ns.Options.FeatureIsNew(tog, fresh), "questing together counted as new as a whole")
     local specs = ns.Options.Compact(tog.build())
     ns.Options.MarkPage(tog, specs, fresh)
-    for _, sp in ipairs(specs) do assert(not sp.isNew, "a setting of a whole new feature is marked") end
-    -- a new setting on an older page (the tooltip's disenchant info): marked there
-    local ttPage
-    for _, p in ipairs(ns.Options.PAGES) do
-        for _, sp in ipairs(p.build and ns.Options.Compact(p.build()) or {}) do if sp.key == "disenchant" then ttPage = p end end
+    local markedNew, markedOld = false, false
+    for _, sp in ipairs(specs) do
+        if sp.key == "announceMine" and sp.isNew then markedNew = true end
+        if sp.key == "turnInWatch" and sp.isNew then markedOld = true end
     end
-    assert(ttPage and not ns.Options.FeatureIsNew(ttPage, fresh) and ns.Options.PageIsNew(ttPage, fresh), "disenchant page")
-    local ttSpecs = ns.Options.Compact(ttPage.build())
-    ns.Options.MarkPage(ttPage, ttSpecs, fresh)
-    local marked = false
-    for _, sp in ipairs(ttSpecs) do if sp.key == "disenchant" and sp.isNew then marked = true end end
-    assert(marked, "a new setting is not marked")
+    assert(markedNew and not markedOld, "new marks on the together page")
+    -- a feature new as a whole (its main switch is new): marked in the navigation only, not on its settings
+    local whole = { [ns.db.together] = { enabled = true, window = true } }
+    assert(ns.Options.FeatureIsNew(tog, whole) and ns.Options.PageIsNew(tog, whole), "whole new feature")
+    specs = ns.Options.Compact(tog.build())
+    ns.Options.MarkPage(tog, specs, whole)
+    for _, sp in ipairs(specs) do assert(not sp.isNew, "a setting of a whole new feature is marked") end
 end
 -- XP and reputation bar share a page with a tab each; the second tab shows the reputation settings
 do
@@ -861,7 +900,15 @@ for i = 1, #ns.Options.PAGES do
             assert(GameTooltip.fqpLoot and GameTooltip.fqpLoot.text:find("besser") and ForeverQoLPanelLootTip:IsShown(), "loot tooltip")
             LO:ShowUpgrade("new", r)
             assert(LO.up:IsShown(), "upgrade window")
-            LO.up:Hide()
+            -- a fight begins: the window steps aside (armour cannot be changed) and waits for the end of the fight
+            MOCK_fire("PLAYER_REGEN_DISABLED")
+            assert(not LO.up:IsShown() and LO.afterCombat, "upgrade window stays in a fight")
+            local realICL = InCombatLockdown
+            InCombatLockdown = function() return true end
+            LO:NextUpgrade()
+            assert(not LO.up:IsShown(), "upgrade window opened in a fight")
+            InCombatLockdown = realICL
+            assert(LO.up.result == "combat", "upgrade put aside like 'Later' in a fight")
             LOOT_ITEM_SELF = "Ihr erhaltet Beute: %s."
             for _, ev in ipairs({ "LOOT_OPENED" }) do MOCK_fire(ev) end
             LO:BagsFull()
@@ -1258,9 +1305,9 @@ for i = 1, #ns.Options.PAGES do
         for _ = 1, 30 do ns.Wizard:Go(1) end
         assert(ForeverQoLPanelDB.wizard == ns.VERSION, "wizard not finished")
         ForeverQoLPanelDB.wizard = "0.1.0"; ns.Wizard:Open(false)
-        assert(#ns.Wizard.pages == 40, "update pages: " .. #ns.Wizard.pages)
+        assert(#ns.Wizard.pages == 41, "update pages: " .. #ns.Wizard.pages)
         for i = 1, 8 do ns.Wizard:Jump(i) end
-        ns.Wizard:OpenNews(); assert(#ns.Wizard.pages == 17 and ns.Wizard.pages[2].id == "petbar" and ns.Wizard.pages[16].id == "lootclass", "news pages: " .. #ns.Wizard.pages)
+        ns.Wizard:OpenNews(); assert(#ns.Wizard.pages == 2 and ns.Wizard.pages[2].id == "togetherchat", "news pages: " .. #ns.Wizard.pages)
         ns.Wizard.frame.tiles[1]:GetScript("OnClick")(ns.Wizard.frame.tiles[1])
         ns.Wizard:Finish()
         SlashCmdList.FOREVERQOLPANEL("reset")

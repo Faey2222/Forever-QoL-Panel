@@ -720,7 +720,7 @@ function LO:UpgradeFrame()
         f:Hide()
     end)
     f.equip:SetScript("OnClick", function()
-        if InCombatLockdown() or not f.link then return end
+        if LO.InFight() or not f.link then return end
         LO:Equip(f.link, f.slot)
         f.result = "equip"
         f:Hide()
@@ -827,9 +827,26 @@ function LO.Worth(r)
     return r.pct ~= nil and r.pct >= (db().threshold or 3)
 end
 
+-- in a fight (armour cannot be changed then): from the first blow on, not only once the game locks its frames
+function LO.InFight()
+    if InCombatLockdown() then return true end
+    local c = UnitAffectingCombat and UnitAffectingCombat("player")
+    if c == nil or ns.Secret(c) then return false end
+    return c and true or false
+end
+
 function LO:NextUpgrade()
     if self.up and self.up:IsShown() then return end
-    if InCombatLockdown() then self.afterCombat = true return end
+    if LO.InFight() then
+        if InCombatLockdown() then
+            self.afterCombat = true   -- the end of the fight brings it
+        elseif not self.retrying then
+            -- in combat for the game, but its frames are not locked (no end-of-fight event to wait for): look again
+            self.retrying = true
+            C_Timer.After(2, function() LO.retrying = false; ns.Debug.Call("LootOpt", LO.NextUpgrade, LO) end)
+        end
+        return
+    end
     local nxt = table.remove(queue, 1)
     if not nxt then return end
     local key = itemKey(nxt)
@@ -1157,9 +1174,26 @@ ns.OnLogin(function()
         local msg = type(b) == "string" and b or a
         if msg == ERR_INV_FULL or msg == ERR_BAG_FULL then ns.Debug.Call("LootOpt", LO.BagsFull, LO) end
     end)
+    -- a fight begins with the window open: it steps aside and comes back afterwards (armour cannot be changed in a
+    -- fight)
+    ns.On("PLAYER_REGEN_DISABLED", function()
+        local f = LO.up
+        if f and f:IsShown() and f.link then
+            local link = f.link
+            f.result = "combat"   -- not put aside as with "Later"
+            f:Hide()
+            table.insert(queue, 1, link)
+            queued[itemKey(link)] = true
+            LO.afterCombat = true
+        end
+    end)
     ns.On("PLAYER_REGEN_ENABLED", function()
         if LO.up and LO.up:IsShown() then LO.up.equip:SetEnabled(true) end
-        if LO.afterCombat then LO.afterCombat = false; LO:NextUpgrade() end
+        -- a moment later: the game may still count the last blow as combat
+        if LO.afterCombat then
+            LO.afterCombat = false
+            C_Timer.After(1, function() ns.Debug.Call("LootOpt", LO.NextUpgrade, LO) end)
+        end
     end)
     ns.On("PLAYER_ENTERING_WORLD", function() LO:Revisit(4) end)
     ns.On("PLAYER_LEVEL_UP", function() LO:Revisit(2) end)

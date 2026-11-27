@@ -2,7 +2,7 @@ local ADDON, ns = ...
 
 ns.name = ADDON
 ns.title = "Forever QoL Panel"
-ns.VERSION = "1.8.0"   -- the setup wizard shows the pages of features newer than the last version seen
+ns.VERSION = "1.8.1"   -- the setup wizard shows the pages of features newer than the last version seen
 ns.MEDIA = "Interface\\AddOns\\" .. ADDON .. "\\media\\"
 
 function ns.Tex(name)
@@ -281,7 +281,8 @@ ns.defaults = {
         hideWithWindows = true, ammo = true, ammoMin = 200, hideResting = false },   -- pos / link: placement of the two groups
     -- questing together (Together.lua): window with the group's active quests (pos, locked); state: this group's
     together = { enabled = true, window = true, locked = false, xpWindow = true, xpSeparate = false, xpLocked = false,
-        minimizeTracker = true, autoAccept = true, soundAllDone = true, turnInWatch = true, soundTurnIn = true },   -- autoAccept: quests shared through the addon are accepted   -- Blizzard's quest tracker folds up while most of the group uses the addon   -- xpPos when the XP window is moved
+        minimizeTracker = true, autoAccept = true, soundAllDone = true, turnInWatch = true, soundTurnIn = true,
+        announceMine = true, announceGroup = true, announcePick = true, announceHide = true },   -- done quests said in the group chat   -- autoAccept: quests shared through the addon are accepted   -- Blizzard's quest tracker folds up while most of the group uses the addon   -- xpPos when the XP window is moved
     -- enemy radar (Radar.lua): sounds, the stealth warning, the list below the element; stealthPos when moved
     radar = { enabled = true, sound = "fsEnemy", stealthSound = "fsAlarm", stealthWarning = true, stealthTime = 6,
         autoList = true, listRows = 6, timeout = 60, quietResting = true, hideEmpty = false,

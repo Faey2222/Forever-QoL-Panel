@@ -603,6 +603,12 @@ local PAGES = {
             check(L.OPT_TOG_SOUNDDONE, L.OPT_TOG_SOUNDDONE_TIP, together, "soundAllDone", Tg),
             check(L.OPT_TOG_TURNIN, L.OPT_TOG_TURNIN_TIP, together, "turnInWatch", Tg),
             check(L.OPT_TOG_SOUNDTURNIN, L.OPT_TOG_SOUNDTURNIN_TIP, together, "soundTurnIn", { "together", "togturnin" }, { indent = true }),
+            -- done quests said in the group chat
+            header(L.TOG_SEC_CHAT),
+            check(L.OPT_TOG_ANNMINE, L.OPT_TOG_ANNMINE_TIP, together, "announceMine", Tg),
+            check(L.OPT_TOG_ANNGROUP, L.OPT_TOG_ANNGROUP_TIP, together, "announceGroup", Tg),
+            check(L.OPT_TOG_ANNPICK, L.OPT_TOG_ANNPICK_TIP, together, "announcePick", Tg),
+            check(L.OPT_TOG_ANNHIDE, L.OPT_TOG_ANNHIDE_TIP, together, "announceHide", Tg),
             -- the test with a made-up partner: only in the development copy
             dev and header(L.SEC_RADAR_TEST) or nil,
             dev and buttons(L.OPT_RADAR_TEST, L.OPT_TOG_TEST_TIP, {

@@ -207,6 +207,91 @@ function T:AllDone(id)
     if db().soundAllDone then play("questdone") end
     local b = self.frame and self.frame.blocks[id]
     if b and self.Glow then self.Glow(b, 0.5, 2) end
+    self:AnnounceGroup(id)
+end
+
+-- Said in the group chat (options announceMine, announceGroup), in the addon's language, with a link to the quest:
+--  1. a quest of yours is done: "[Forever QoL Panel]: I have completed the quest [link]!"
+--  2. the group leader, when everyone using the addon who holds a quest is done (at least one besides the leader):
+--     "We as a group (names) have completed the quest [link]! Good work!" - the wording changes now and then.
+-- Once per quest. In the test nothing goes to the chat; you alone see it.
+T.announced = { mine = {}, group = {} }
+
+function T.QuestLink(id)
+    local title = T.TitleOf(id)
+    local q = T.mine[id]
+    local level = q and tonumber(q.level) or 0
+    -- The game's own link (the chat passes only links in the exact form the client makes; a hand-made one arrives as
+    -- plain text). GetQuestLink takes a quest id in some clients and a log index in others: whatever it gives must
+    -- point to this very quest.
+    local function valid(link)
+        return type(link) == "string" and not ns.Secret(link) and link:find("|Hquest:" .. id .. ":", 1, true) and link or nil
+    end
+    local QL = C_QuestLog
+    local tries = {}
+    if QL and QL.GetQuestLink then tries[#tries + 1] = { "C_QuestLog", QL.GetQuestLink, id } end
+    if GetQuestLink then
+        tries[#tries + 1] = { "id", GetQuestLink, id }
+        local index = QL and QL.GetLogIndexForQuestID and readable(QL.GetLogIndexForQuestID(id))
+        if not index and GetQuestLogIndexByID then index = readable(GetQuestLogIndexByID(id)) end
+        if index then tries[#tries + 1] = { "index", GetQuestLink, index } end
+    end
+    for _, t in ipairs(tries) do
+        local ok, link = pcall(t[2], t[3])
+        link = ok and valid(link)
+        if link then
+            ns.Debug.Set("questLink", { way = t[1], link = (link:gsub("|", "||")) })
+            return link
+        end
+    end
+    ns.Debug.Set("questLink", { way = "built", id = id })
+    return ("|cffffff00|Hquest:%d:%d|h[%s]|h|r"):format(id, level, title)
+end
+
+local function chatChannel()
+    if IsInRaid and IsInRaid() then return "RAID" end
+    local home = LE_PARTY_CATEGORY_HOME and IsInGroup(LE_PARTY_CATEGORY_HOME)
+    local inst = LE_PARTY_CATEGORY_INSTANCE and IsInGroup(LE_PARTY_CATEGORY_INSTANCE)
+    if inst and not home then return "INSTANCE_CHAT" end
+    return "PARTY"
+end
+
+-- one of the wordings, at random
+local function pick(keys)
+    local L = ns.L
+    return L[keys[math.random(#keys)]]
+end
+
+function T:Say(text)
+    local msg = "[" .. ns.title .. "]: " .. text
+    if self.testing then
+        print("|cffffd100" .. ns.title .. "|r |cff9d9d9d(" .. ns.L.TOG_ANN_PREVIEW .. ")|r " .. msg)
+        return
+    end
+    if not (IsInGroup and IsInGroup()) or not SendChatMessage then return end
+    pcall(SendChatMessage, msg, chatChannel())
+end
+
+function T:AnnounceMine(id)
+    if not db().announceMine or self.announced.mine[id] or id >= ns.Comm.TEST_IDS and not self.testing then return end
+    self.announced.mine[id] = true
+    -- a moment later: if this made the whole group done, the leader's group message says it instead
+    C_Timer.After(1.5, function()
+        if self.announced.group[id] == "said" then return end
+        self:Say(pick({ "TOG_ANN_MINE_A", "TOG_ANN_MINE_B", "TOG_ANN_MINE_C" }):format(T.QuestLink(id)))
+    end)
+end
+
+function T:AnnounceGroup(id)
+    if not db().announceGroup or self.announced.group[id] or not self.Leader() then return end
+    -- everyone holding it who uses the addon: you and at least one more
+    local names = {}
+    for _, h in ipairs(self:Holders(id)) do names[#names + 1] = h.name end
+    if #names < 2 then return end
+    table.sort(names, function(a, b) if a == me() then return true elseif b == me() then return false end return a < b end)
+    self.announced.group[id] = "said"
+    self:Say(pick({ "TOG_ANN_GROUP_A", "TOG_ANN_GROUP_B", "TOG_ANN_GROUP_C", "TOG_ANN_GROUP_D" })
+        :format(table.concat(names, ", "), T.QuestLink(id)))
 end
 
 -- Turned in by some, not by all --------------------------------------------------------------------------------
@@ -291,6 +376,8 @@ function T:ApplyMine(snap)
         local changed = not o or o.done ~= q.done or o.prog ~= q.prog
         if changed and grouped then ns.Comm:SendGroup("Q", id, q.done and 1 or 0, q.prog) end
         if o and amount(q.prog, q.done) > amount(o.prog, o.done) then self:Progressed(id) end
+        -- just done (not a quest that was done already when the log was first read): said in the group chat
+        if o and q.done and not o.done and grouped then self:AnnounceMine(id) end
         if changed then self:CheckDone(id) end
     end
     for id in pairs(old) do
@@ -366,12 +453,28 @@ function T:OnHidden(sender, id)
 end
 
 -- the leader picks a quest: shown for everyone, even without progress yet
-function T:Pick(id)
+-- quiet: picked by the test itself (no message in the chat)
+function T:Pick(id, quiet)
     if not self.Leader() then return end
     local st = state()
     st.active[id], st.hidden[id], st.finished[id] = true, nil, nil
     ns.Comm:SendGroup("P", id)
+    if not quiet and db().announcePick then
+        self:Say(pick({ "TOG_ANN_PICK_A", "TOG_ANN_PICK_B" }):format(self:AddonNames(), T.QuestLink(id)))
+    end
     self:Changed()
+end
+
+-- the group's members using the addon (you first), for the chat messages
+function T:AddonNames()
+    local names = { me() }
+    local others = {}
+    for name in pairs(self.Roster()) do
+        if self.members[name] or ns.Comm.seen[name] or (ns.GroupXP and ns.GroupXP.members[name]) then others[#others + 1] = name end
+    end
+    table.sort(others)
+    for _, n in ipairs(others) do names[#names + 1] = n end
+    return table.concat(names, ", ")
 end
 
 function T:OnPicked(sender, id)
@@ -443,6 +546,9 @@ function T:Hide(id)
     local st = state()
     st.hidden[id], st.active[id] = true, nil
     ns.Comm:SendGroup("H", id)
+    if db().announceHide then
+        self:Say(pick({ "TOG_ANN_HIDE_A", "TOG_ANN_HIDE_B" }):format(T.QuestLink(id), self:AddonNames()))
+    end
     self:Fold(id)
 end
 
@@ -1525,7 +1631,7 @@ function T:TestAdd()
     self:ApplyMine(m)
     if self.testN % 3 ~= 0 then
         self:OnQuest(T.TEST_NAME, id, false, "0/10")
-        self:Pick(id)
+        self:Pick(id, true)
     end
     self:Changed()
 end

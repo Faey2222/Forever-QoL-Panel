@@ -249,6 +249,12 @@ local PAGES = {
     { id = "lootclass", icon = "Interface\\Icons\\INV_Misc_Bag_10_Blue", since = "1.8.0", title = "SEC_LOOTOPT", text = "WZ_LOOTCLASS_TEXT", controls = {
         { "check", "OPT_LO_UPGRADE", lo, "upgrade" },
     } },
+    { id = "togetherchat", icon = "Interface\\Icons\\INV_Letter_15", since = "1.8.1", title = "WZ_TOGCHAT", text = "WZ_TOGCHAT_TEXT", controls = {
+        { "check", "OPT_TOG_ANNMINE", function() return ns.db.together end, "announceMine" },
+        { "check", "OPT_TOG_ANNGROUP", function() return ns.db.together end, "announceGroup" },
+        { "check", "OPT_TOG_ANNPICK", function() return ns.db.together end, "announcePick" },
+        { "check", "OPT_TOG_ANNHIDE", function() return ns.db.together end, "announceHide" },
+    } },
     { id = "newmarks", icon = "Interface\\Icons\\INV_Misc_Gem_Diamond_01", since = "1.8.0", title = "WZ_NEWMARKS", text = "WZ_NEWMARKS_TEXT", controls = {} },
     { id = "beastpet", icon = "Interface\\Icons\\Ability_Hunter_BeastTraining", since = "1.4.0", title = "WZ_BEASTPET", text = "WZ_BEASTPET_TEXT", controls = {
         { "check", "OPT_TT_BEASTS", tt, "beasts", class = "HUNTER" },
